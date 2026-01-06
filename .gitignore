@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+kabaddi_env/
+
+# YOLO weights
+*.pt
+
+# VS Code
+.vscode/
+
+# Data
+data/videos/*.mp4
+
+# OS
+.DS_Store
+Thumbs.db
