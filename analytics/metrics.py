@@ -28,3 +28,13 @@ def defender_engagement(defender_positions, raider_positions, threshold=50):
 
 def reaction_time(raid_start_frame, first_engage_frame, fps):
     return (first_engage_frame - raid_start_frame) / fps
+
+def success_rate(successful,total):
+    if total ==0:
+        return 0
+    return successful / total
+
+def normalize(value,min_val,max_val):
+    if max_val - min_val ==0:
+        return 0
+    return (value-min_val)/(max_val-min_val)

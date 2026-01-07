@@ -23,3 +23,17 @@ def build_defender_profile(defensive_events):
         "engagements": total_engagements,
         "stop_success_rate": successful_stops / total_engagements
     }
+
+def build_raider_profile(raids):
+    total_raids = len(raids)
+    
+    successful_raids = sum(1 for r in raids if r["success"])
+    total_penetration = sum(r["penetration"] for r in raids)
+    total_duration = sum(r["duration"] for r in raids)
+    
+    return {
+        "raids": total_raids,
+        "success_rate": successful_raids/total_raids if total_raids else 0,
+        "avg_penetration": total_penetration/total_raids if total_raids else 0,
+        "avg_duration": total_duration/total_raids if total_raids else 0
+    }
