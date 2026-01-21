@@ -1,11 +1,18 @@
 import cv2
 from ultralytics import YOLO
+from reid.reid_model import ReIDModel
+from reid.reid_utils import match_embedding
+
 
 VIDEO_PATH = "data/videos/match_01.mp4"
 
 model = YOLO("yolov8n.pt")
 
 cap = cv2.VideoCapture(VIDEO_PATH)
+
+reid_model = ReIDModel()
+
+semantic_embeddings = {}   # semantic_id → list of embeddings
 
 player_id_map = {}
 
@@ -39,14 +46,25 @@ while True:
             track_id = int(box.id[0])
 
             if track_id not in player_id_map:
-                player_count += 1
-                semantic_id = f"tp{player_count}"
+                # Crop player image
+                crop = frame[y1:y2, x1:x2]
+
+                # Extract appearance embedding
+                embedding = reid_model.extract_embedding(crop)
+
+                # Try to match with existing players
+                matched_id, score = match_embedding(embedding, semantic_embeddings)
+
+                if matched_id is not None:
+                    semantic_id = matched_id
+                    semantic_embeddings[semantic_id].append(embedding)
+                else:
+                    player_count += 1
+                    semantic_id = f"P{player_count}"
+                    semantic_embeddings[semantic_id] = [embedding]
 
                 player_id_map[track_id] = semantic_id
-                player_metadata[semantic_id] = {
-                    "track_id": [track_id],
-                    "first_seen_frame": cap.get(cv2.CAP_PROP_POS_FRAMES),
-                }
+
             else:
                 semantic_id = player_id_map[track_id]
 
