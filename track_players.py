@@ -7,6 +7,12 @@ model = YOLO("yolov8n.pt")
 
 cap = cv2.VideoCapture(VIDEO_PATH)
 
+player_id_map = {}
+
+player_metadata = {}
+
+player_count = 0
+
 if not cap.isOpened():
     print("❌ Cannot open video")
     exit()
@@ -31,12 +37,25 @@ while True:
         for box in results[0].boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             track_id = int(box.id[0])
+
+            if track_id not in player_id_map:
+                player_count += 1
+                semantic_id = f"tp{player_count}"
+
+                player_id_map[track_id] = semantic_id
+                player_metadata[semantic_id] = {
+                    "track_id": [track_id],
+                    "first_seen_frame": cap.get(cv2.CAP_PROP_POS_FRAMES),
+                }
+            else:
+                semantic_id = player_id_map[track_id]
+
             conf = box.conf[0]
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
             cv2.putText(
                 frame,
-                f"ID {track_id}",
+                semantic_id,
                 (x1, y1 - 5),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,

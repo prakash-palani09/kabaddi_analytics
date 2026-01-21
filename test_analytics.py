@@ -4,14 +4,14 @@ from analytics.ranking import rank_players, assign_ranks
 
 
 raider_A = [
-    {"duration": 6, "penetration": 45, "success": True},
-    {"duration": 7, "penetration": 40, "success": True},
-    {"duration": 8, "penetration": 30, "success": False},
+    {"duration": 16, "penetration": 45, "success": True},
+    {"duration": 17, "penetration": 40, "success": True},
+    {"duration": 18, "penetration": 30, "success": False},
 ]
 
 raider_B = [
-    {"duration": 5, "penetration": 25, "success": True},
-    {"duration": 6, "penetration": 20, "success": True},
+    {"duration": 15, "penetration": 25, "success": True},
+    {"duration": 16, "penetration": 20, "success": True},
 ]
 
 profiles = {
