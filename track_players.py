@@ -1,24 +1,11 @@
 import cv2
+import numpy as np
 from ultralytics import YOLO
-from reid.reid_model import ReIDModel
-from reid.reid_utils import match_embedding
 
-
-VIDEO_PATH = "data/videos/match_01.mp4"
+VIDEO_PATH = "data/videos/sample_match.mp4"
 
 model = YOLO("yolov8n.pt")
-
 cap = cv2.VideoCapture(VIDEO_PATH)
-
-reid_model = ReIDModel()
-
-semantic_embeddings = {}   # semantic_id → list of embeddings
-
-player_id_map = {}
-
-player_metadata = {}
-
-player_count = 0
 
 if not cap.isOpened():
     print("❌ Cannot open video")
@@ -26,62 +13,87 @@ if not cap.isOpened():
 
 print("✅ Video opened")
 
+# ---------------- BLUE JERSEY DETECTION ---------------- #
+
+LOWER_BLUE = np.array([100, 120, 80])
+UPPER_BLUE = np.array([130, 255, 255])
+
+def is_blue_jersey(crop):
+    if crop is None or crop.size == 0:
+        return False
+
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv, LOWER_BLUE, UPPER_BLUE)
+
+    blue_pixels = np.count_nonzero(mask)
+    total_pixels = crop.shape[0] * crop.shape[1]
+
+    blue_ratio = blue_pixels / total_pixels
+
+    return blue_ratio > 0.20   # strict dominance
+
+# ---------------- TEMPORAL STABILITY ---------------- #
+
+blue_confirm_counter = 0
+BLUE_CONFIRM_FRAMES = 3
+
+raider_bbox = None
+
+# ----------------------------------------------------- #
+
 while True:
     ret, frame = cap.read()
     if not ret:
         break
 
-    # Run detection + tracking
     results = model.track(
         frame,
         persist=True,
         conf=0.4,
-        classes=[0],   # person
+        classes=[0],   # person only
         tracker="bytetrack.yaml"
     )
+
+    raider_found_this_frame = False
 
     if results[0].boxes.id is not None:
         for box in results[0].boxes:
             x1, y1, x2, y2 = map(int, box.xyxy[0])
-            track_id = int(box.id[0])
 
-            if track_id not in player_id_map:
-                # Crop player image
-                crop = frame[y1:y2, x1:x2]
+            # upper torso only (remove face & legs)
+            h = y2 - y1
+            torso_crop = frame[
+                y1 + int(0.3 * h) : y1 + int(0.65 * h),
+                x1 : x2
+            ]
 
-                # Extract appearance embedding
-                embedding = reid_model.extract_embedding(crop)
+            if is_blue_jersey(torso_crop):
+                raider_found_this_frame = True
+                candidate_bbox = (x1, y1, x2, y2)
 
-                # Try to match with existing players
-                matched_id, score = match_embedding(embedding, semantic_embeddings)
+    # ---------- TEMPORAL CONFIRMATION ----------
+    if raider_found_this_frame:
+        blue_confirm_counter += 1
+    else:
+        blue_confirm_counter = max(0, blue_confirm_counter - 1)
 
-                if matched_id is not None:
-                    semantic_id = matched_id
-                    semantic_embeddings[semantic_id].append(embedding)
-                else:
-                    player_count += 1
-                    semantic_id = f"P{player_count}"
-                    semantic_embeddings[semantic_id] = [embedding]
+    if blue_confirm_counter >= BLUE_CONFIRM_FRAMES:
+        raider_bbox = candidate_bbox
 
-                player_id_map[track_id] = semantic_id
+    # ---------- DRAW RAIDER ----------
+    if raider_bbox is not None:
+        x1, y1, x2, y2 = raider_bbox
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        cv2.putText(
+            frame, "RAIDER",
+            (x1, y1 - 10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (255, 0, 0),
+            2
+        )
 
-            else:
-                semantic_id = player_id_map[track_id]
-
-            conf = box.conf[0]
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 255), 2)
-            cv2.putText(
-                frame,
-                semantic_id,
-                (x1, y1 - 5),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0, 255, 255),
-                2
-            )
-
-    cv2.imshow("Player Tracking", frame)
+    cv2.imshow("Raider Tracking (Blue Jersey)", frame)
 
     if cv2.waitKey(1) & 0xFF == 27:
         break
