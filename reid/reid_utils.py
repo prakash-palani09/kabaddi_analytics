@@ -5,7 +5,7 @@ def cosine_similarity(a, b):
     return np.dot(a, b) / (norm(a) * norm(b))
 
 
-def match_embedding(new_emb, stored_embeddings, threshold=0.75):
+def match_embedding(new_emb, stored_embeddings, threshold=0.85):
     best_id = None
     best_score = -1
 
