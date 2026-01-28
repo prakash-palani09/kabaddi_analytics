@@ -17,14 +17,23 @@ def rank_players(player_profiles):
 def raider_score(profile, weights=None):
     if weights is None:
         weights = {
-            "success_rate":0.45,
-            "avg_penetration": 0.35,
+            "success_rate": 0.30,
+            "avg_points": 0.25,
+            "avg_penetration": 0.25,
             "avg_duration": 0.20
         }
+    
+    # Normalize penetration (assuming max ~250px)
+    norm_penetration = min(profile["avg_penetration"] / 250, 1.0)
+    
+    # Normalize points (assuming max average ~3 points)
+    norm_points = min(profile["avg_points"] / 3.0, 1.0)
+    
     return (
         weights["success_rate"] * profile["success_rate"]
-        + weights["avg_penetration"] * profile["avg_penetration"]
-        - weights["avg_duration"] * profile["avg_duration"]
+        + weights["avg_penetration"] * norm_penetration
+        + weights["avg_points"] * norm_points
+        - weights["avg_duration"] * (profile["avg_duration"] / 10)  # Penalty for long duration
     )
     
 def rank_players(player_profiles):
