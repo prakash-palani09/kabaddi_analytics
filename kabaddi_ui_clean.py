@@ -31,16 +31,34 @@ class KabaddiAnalyticsApp:
             with open('synthetic_data.csv', 'r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    self.data.append({
-                        'match_id': row['match_id'],
-                        'player_id': row['player_id'],
-                        'raid_duration_sec': float(row['raid_duration_sec']),
-                        'penetration_px': float(row['penetration_px']),
-                        'success': int(row['success']),
-                        'raid_points': int(row.get('raid_points', 0))  # Handle missing points
-                    })
-            self.update_rankings()
+                    try:
+                        # Handle empty or invalid values
+                        raid_points = row.get('raid_points', '').strip()
+                        if not raid_points or raid_points == '':
+                            raid_points = 0
+                        else:
+                            raid_points = int(raid_points)
+                        
+                        self.data.append({
+                            'match_id': row['match_id'],
+                            'player_id': row['player_id'],
+                            'raid_duration_sec': float(row['raid_duration_sec']),
+                            'penetration_px': float(row['penetration_px']),
+                            'success': int(row['success']),
+                            'raid_points': raid_points
+                        })
+                    except (ValueError, KeyError) as e:
+                        print(f"Skipping invalid row: {row} - Error: {e}")
+                        continue
+            
+            if not self.data:
+                print("No valid data found, creating sample data...")
+                self.create_sample_data()
+            else:
+                self.update_rankings()
+                
         except FileNotFoundError:
+            print("synthetic_data.csv not found, creating sample data...")
             self.create_sample_data()
             
     def create_sample_data(self):
@@ -71,12 +89,19 @@ class KabaddiAnalyticsApp:
                     penetration = random.randint(100, 250)  # 100-250 pixels
                     success = random.choice([0, 1])  # Random success
                     
+                    # Add raid points based on success
+                    if success == 1:
+                        raid_points = random.choices([1, 2, 3, 4, 5], weights=[50, 25, 15, 8, 2])[0]
+                    else:
+                        raid_points = 0
+                    
                     self.data.append({
                         'match_id': match,
                         'player_id': player,
                         'raid_duration_sec': duration,
                         'penetration_px': penetration,
-                        'success': success
+                        'success': success,
+                        'raid_points': raid_points
                     })
         
         # Ensure each player has 30-200 total raids
@@ -94,12 +119,16 @@ class KabaddiAnalyticsApp:
                 # Add more raids
                 for _ in range(target_count - current_count):
                     match = random.choice(player_matches if player in [p for p in players if p in [row['player_id'] for row in self.data]] else matches[:6])
+                    success = random.choice([0, 1])
+                    raid_points = random.choices([1, 2, 3, 4, 5], weights=[50, 25, 15, 8, 2])[0] if success else 0
+                    
                     self.data.append({
                         'match_id': match,
                         'player_id': player,
                         'raid_duration_sec': round(random.uniform(2.0, 8.0), 1),
                         'penetration_px': random.randint(100, 250),
-                        'success': random.choice([0, 1])
+                        'success': success,
+                        'raid_points': raid_points
                     })
             elif current_count > target_count:
                 # Remove excess raids
@@ -305,7 +334,7 @@ class KabaddiAnalyticsApp:
         table_frame.pack(side='left', fill='both', expand=True, padx=5)
         
         # Treeview for rankings
-        columns = ('Rank', 'Player', 'Score', 'Recent SR', 'Recent Pen', 'Recent Dur', 'Recent Pts', 'Recent Raids', 'All Raids', 'All SR', 'All Pts', 'Matches')
+        columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration', 'Avg Duration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
         self.ranking_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         # Store sort direction for each column
@@ -314,10 +343,10 @@ class KabaddiAnalyticsApp:
         # Adjust column widths and add sorting
         for col in columns:
             self.ranking_tree.heading(col, text=col, command=lambda c=col: self.sort_table(c))
-            if col in ['Recent SR', 'Recent Pen', 'Recent Dur', 'Recent Pts', 'All SR', 'All Pts']:
-                self.ranking_tree.column(col, width=80)
+            if col in ['Success Rate', 'Avg Penetration', 'Avg Duration', 'Avg Points']:
+                self.ranking_tree.column(col, width=100)
             else:
-                self.ranking_tree.column(col, width=70)
+                self.ranking_tree.column(col, width=80)
         
         self.ranking_tree.pack(fill='both', expand=True, padx=5, pady=5)
         
@@ -687,19 +716,22 @@ class KabaddiAnalyticsApp:
             # Count unique matches for this player
             player_matches = set(row['match_id'] for row in self.data if row['player_id'] == player_id)
             
+            # Calculate total points and avg points per raid
+            total_points = sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == player_id)
+            total_raids = profile.get('all_raids', profile['raids'])
+            avg_points_per_raid = total_points / total_raids if total_raids > 0 else 0
+            
             self.ranking_tree.insert('', 'end', values=(
                 rank_data['rank'],
                 player_id,
-                f"{rank_data['score']:.3f}",
-                f"{profile['success_rate']:.2f}",  # Recent (scoring)
-                f"{profile['avg_penetration']:.0f}",
-                f"{profile['avg_duration']:.1f}",
-                f"{profile.get('avg_points', 0):.2f}",
-                profile['raids'],  # Recent raids count
-                profile.get('all_raids', profile['raids']),  # All-time raids
-                f"{profile.get('all_success_rate', profile['success_rate']):.2f}",  # All-time SR
-                f"{profile.get('all_avg_points', profile.get('avg_points', 0)):.2f}",  # All-time points
-                len(player_matches)
+                f"{rank_data['score']:.3f}",  # Recent score only
+                f"{profile.get('all_success_rate', profile['success_rate']):.2f}",  # Overall SR
+                f"{profile.get('all_avg_penetration', profile['avg_penetration']):.0f}",  # Overall penetration
+                f"{profile.get('all_avg_duration', profile['avg_duration']):.1f}",  # Overall duration
+                total_points,  # Total points
+                total_raids,  # Total raids
+                f"{avg_points_per_raid:.2f}",  # Avg points per raid
+                len(player_matches)  # Total matches
             ))
         
         # Update charts
@@ -718,23 +750,23 @@ class KabaddiAnalyticsApp:
         self.ax1.set_title('Player Scores')
         self.ax1.set_ylabel('Score')
         
-        # Chart 2: Success Rates
-        success_rates = [self.player_stats[p]['success_rate'] for p in players]
+        # Chart 2: Success Rates (Overall)
+        success_rates = [self.player_stats[p].get('all_success_rate', self.player_stats[p]['success_rate']) for p in players]
         self.ax2.bar(players, success_rates, color='#2ecc71')
-        self.ax2.set_title('Success Rates')
+        self.ax2.set_title('Success Rates (Overall)')
         self.ax2.set_ylabel('Success Rate')
         
-        # Chart 3: Average Penetration
-        penetrations = [self.player_stats[p]['avg_penetration'] for p in players]
+        # Chart 3: Average Penetration (Overall)
+        penetrations = [self.player_stats[p].get('all_avg_penetration', self.player_stats[p]['avg_penetration']) for p in players]
         self.ax3.bar(players, penetrations, color='#e74c3c')
-        self.ax3.set_title('Average Penetration')
+        self.ax3.set_title('Average Penetration (Overall)')
         self.ax3.set_ylabel('Penetration (px)')
         
-        # Chart 4: Average Duration
-        durations = [self.player_stats[p]['avg_duration'] for p in players]
-        self.ax4.bar(players, durations, color='#f39c12')
-        self.ax4.set_title('Average Duration')
-        self.ax4.set_ylabel('Duration (sec)')
+        # Chart 4: Total Points
+        total_points = [sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == p) for p in players]
+        self.ax4.bar(players, total_points, color='#f39c12')
+        self.ax4.set_title('Total Points')
+        self.ax4.set_ylabel('Points')
         
         plt.tight_layout()
         self.canvas.draw()
@@ -852,10 +884,10 @@ class KabaddiAnalyticsApp:
         reverse = self.sort_reverse[col]
         
         # Sort based on column type
-        if col in ['Rank', 'Recent Raids', 'All Raids', 'Matches']:
+        if col in ['Rank', 'Total Points', 'Total Raids', 'Matches']:
             # Integer columns
             items.sort(key=lambda x: int(x[0]), reverse=reverse)
-        elif col in ['Score', 'Recent SR', 'Recent Pen', 'Recent Dur', 'Recent Pts', 'All SR', 'All Pts']:
+        elif col in ['Score', 'Success Rate', 'Avg Penetration', 'Avg Duration', 'Avg Points']:
             # Float columns
             items.sort(key=lambda x: float(x[0]), reverse=reverse)
         else:

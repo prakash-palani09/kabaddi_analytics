@@ -20,8 +20,8 @@ def generate_realistic_data():
     print(f"Matches: {len(matches)}")
     
     for player in players:
-        # Each player participates in 10-18 matches
-        num_matches = random.randint(10, 18)
+        # Each player participates in 10-20 matches
+        num_matches = random.randint(10, 20)
         player_matches = random.sample(matches, num_matches)
         
         # Each player has 30-200 total raids
@@ -46,7 +46,7 @@ def generate_realistic_data():
         for match, num_raids in zip(player_matches, raids_per_match):
             for _ in range(num_raids):
                 # Realistic parameters
-                duration = round(random.uniform(2.0, 8.0), 1)  # 2-8 seconds
+                duration = round(random.uniform(5.0, 25.0), 1)  # 5-25 seconds
                 penetration = random.randint(100, 250)  # 100-250 pixels
                 
                 # Success rate varies by player skill (some players are better)

@@ -1,0 +1,3 @@
+Penetration: 1008.4 pixels
+Duration: 16.35 seconds
+Success: 1
