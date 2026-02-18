@@ -1,0 +1,2 @@
+player_id,duration_sec,penetration_px,total_distance,avg_speed,direction_changes,success,crossed_bonus,crossed_baulk,deepest_zone
+P1,23.37,571.8,4008.3,173.8,62,1,True,True,out_of_bounds
