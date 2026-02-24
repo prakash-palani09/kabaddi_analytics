@@ -31,10 +31,48 @@ class KabaddiAnalyticsApp:
         self.create_main_interface()
         
     def load_data(self):
-        """Load synthetic data and calculate rankings"""
+        """Load extracted raid data and calculate rankings"""
         try:
             self.data = []
-            # Look for CSV in data/synthetic folder
+            # First try to load extracted data from real video processing
+            extracted_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "extracted", "extracted_data.csv")
+            
+            if os.path.exists(extracted_path):
+                print(f"Loading extracted data from: {extracted_path}")
+                with open(extracted_path, 'r') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        try:
+                            # Check if it's the new format (from data_extract.py)
+                            if 'raider_id' in row and 'duration' in row:
+                                self.data.append({
+                                    'match_id': 'Extracted',
+                                    'player_id': str(row['raider_id']),
+                                    'raid_duration_sec': float(row['duration']),
+                                    'penetration_px': float(row['max_penetration']),
+                                    'success': 1 if row.get('crossed_baulk', 'False') == 'True' else 0,
+                                    'raid_points': 1 if row.get('crossed_baulk', 'False') == 'True' else 0
+                                })
+                            # Old format
+                            elif 'player_id' in row and 'duration_sec' in row:
+                                self.data.append({
+                                    'match_id': 'Extracted',
+                                    'player_id': row['player_id'],
+                                    'raid_duration_sec': float(row['duration_sec']),
+                                    'penetration_px': float(row['penetration_px']),
+                                    'success': int(row['success']),
+                                    'raid_points': 1 if int(row['success']) == 1 else 0
+                                })
+                        except (ValueError, KeyError) as e:
+                            print(f"Skipping invalid row: {row} - Error: {e}")
+                            continue
+                
+                if self.data:
+                    print(f"Loaded {len(self.data)} raids from extracted data")
+                    self.update_rankings()
+                    return
+            
+            # Fallback to synthetic data
             csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "synthetic", "synthetic_data.csv")
             with open(csv_path, 'r') as f:
                 reader = csv.DictReader(f)
@@ -393,227 +431,124 @@ class KabaddiAnalyticsApp:
         if not hasattr(self, 'video_path'):
             messagebox.showerror("Error", "Please select a video file first!")
             return
-            
-        self.log_status("Setting up court lines (baulk/bonus)...")
-        # Run court lines setup script
-        import subprocess
-        subprocess.Popen(["python", "court/setup_court_lines.py"])
-        self.log_status("✅ Court lines setup window opened")
+        
+        # Store the selected video path for later use
+        self.current_video_path = self.video_path
+        self.log_status("Setting up play area (court boundaries, midline, baulk, bonus)...")
+        threading.Thread(target=self.run_setup_play_area, daemon=True).start()
     
     def setup_midline(self):
-        if not hasattr(self, 'video_path'):
-            messagebox.showerror("Error", "Please select a video file first!")
-            return
-            
-        self.log_status("Setting up midline...")
-        threading.Thread(target=self.run_setup_midline, daemon=True).start()
+        # Redirect to play area setup
+        self.setup_court_lines()
         
-    def run_setup_midline(self):
+    def run_setup_play_area(self):
         try:
-            self.log_status("=== MIDLINE SETUP PROCESS ===")
-            self.log_status("Step 1/3: Copying video to processing directory...")
+            self.log_status("=== PLAY AREA SETUP PROCESS ===")
+            self.log_status("Step 1/2: Preparing video...")
             
-            # Copy video to expected location
-            target_path = "data/videos/current_video.mp4"
-            os.makedirs("data/videos", exist_ok=True)
-            shutil.copy2(self.video_path, target_path)
-            self.log_status("Video copied successfully")
+            # Use the stored video path
+            target_path = self.current_video_path
+            self.log_status(f"Using video: {os.path.basename(target_path)}")
             
-            self.log_status("Step 2/3: Loading video for midline selection...")
+            self.log_status("Step 2/2: Interactive play area setup...")
+            self.log_status(">>> INSTRUCTION: Click 11 points in order:")
+            self.log_status("    1-5: Play box corners (pentagon, clockwise)")
+            self.log_status("    6-7: Midline (2 points)")
+            self.log_status("    8-9: Baulk line (2 points)")
+            self.log_status("    10-11: Bonus line (2 points)")
             
-            # Run setup directly in this process
-            import cv2
-            from court.midline_manager import save_midline
+            # Import and run setup_play_area
+            import subprocess
+            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            setup_script = os.path.join(root_dir, "court", "setup_play_area.py")
             
-            DISPLAY_SCALE = 0.6
-            midline_points = []
+            # Run the setup script with the video path
+            result = subprocess.run([sys.executable, setup_script, target_path], 
+                                   capture_output=True, text=True)
             
-            def mouse_callback(event, x, y, flags, param):
-                if event == cv2.EVENT_LBUTTONDOWN and len(midline_points) < 2:
-                    midline_points.append((int(x / DISPLAY_SCALE), int(y / DISPLAY_SCALE)))
-                    self.log_status(f"Midline point {len(midline_points)} selected: {midline_points[-1]}")
-            
-            cap = cv2.VideoCapture(target_path)
-            ret, first_frame = cap.read()
-            
-            if not ret:
-                self.log_status("Error: Cannot read video file")
-                return
-            
-            self.log_status("Video loaded successfully")
-            self.log_status("Step 3/3: Interactive midline selection...")
-            self.log_status(">>> INSTRUCTION: Click 2 points on the court midline, then press ENTER <<<")
-            
-            cv2.namedWindow("Setup Midline", cv2.WINDOW_NORMAL)
-            cv2.setMouseCallback("Setup Midline", mouse_callback)
-            
-            while True:
-                temp = first_frame.copy()
-                for p in midline_points:
-                    cv2.circle(temp, p, 6, (0,255,255), -1)
-                
-                if len(midline_points) == 2:
-                    cv2.line(temp, midline_points[0], midline_points[1], (0,255,255), 2)
-                    cv2.putText(temp, "Press ENTER to save", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
-                else:
-                    cv2.putText(temp, f"Click point {len(midline_points)+1}/2", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2)
-                
-                display = cv2.resize(temp, None, fx=DISPLAY_SCALE, fy=DISPLAY_SCALE)
-                cv2.imshow("Setup Midline", display)
-                
-                key = cv2.waitKey(1) & 0xFF
-                if key == 13 and len(midline_points) == 2:
-                    self.log_status("Midline points confirmed")
-                    break
-                elif key == 27:
-                    self.log_status("Setup cancelled by user")
-                    cap.release()
-                    cv2.destroyAllWindows()
-                    return
-            
-            cap.release()
-            cv2.destroyAllWindows()
-            
-            p1, p2 = midline_points
-            save_midline(target_path, p1, p2)
-            self.log_status(f"Midline coordinates saved: {p1} to {p2}")
-            self.log_status("=== MIDLINE SETUP COMPLETED SUCCESSFULLY ===")
+            if result.returncode == 0:
+                self.log_status("Configuration saved successfully")
+                self.log_status("=== PLAY AREA SETUP COMPLETED SUCCESSFULLY ===")
+            else:
+                self.log_status("Setup cancelled or failed")
+                if result.stderr:
+                    self.log_status(f"Error: {result.stderr}")
                 
         except Exception as e:
-            self.log_status(f"Error in midline setup: {str(e)}")
+            self.log_status(f"Error in play area setup: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
     def process_video(self):
         if not hasattr(self, 'video_path'):
             messagebox.showerror("Error", "Please select a video file first!")
             return
-            
+        
+        # Store the selected video path for processing
+        self.current_video_path = self.video_path
         self.log_status("Processing video for raid analysis...")
         threading.Thread(target=self.run_video_processing, daemon=True).start()
         
     def run_video_processing(self):
         try:
             self.log_status("=== VIDEO PROCESSING PIPELINE ===")
-            self.log_status("Step 1/6: Initializing AI models...")
             
-            # Run processing directly in this process
-            import cv2
-            import numpy as np
-            from ultralytics import YOLO
-            from court.midline_manager import load_midline, has_midline
+            # Use the stored video path
+            VIDEO_PATH = self.current_video_path
+            self.log_status(f"Processing: {os.path.basename(VIDEO_PATH)}")
             
-            VIDEO_PATH = "data/videos/current_video.mp4"
-            MODEL_PATH = "yolov8n.pt"
+            # Check if play area is configured
+            root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            config_path = os.path.join(root_dir, "config", "play_area.json")
             
-            self.log_status("Step 2/6: Loading saved midline configuration...")
-            
-            if not has_midline(VIDEO_PATH):
-                self.log_status("No saved midline found! Please run Setup Midline first.")
+            if not os.path.exists(config_path):
+                self.log_status("❌ No play area configuration found!")
+                self.log_status("Please run 'Setup Court Lines' first.")
                 return
             
-            midline_data = load_midline(VIDEO_PATH)
-            p1, p2 = midline_data["p1"], midline_data["p2"]
-            self.log_status(f"Midline loaded: {p1} to {p2}")
+            self.log_status("Step 1/3: Initializing data extraction system...")
             
-            self.log_status("Step 3/6: Loading YOLO model for player detection...")
-            cap = cv2.VideoCapture(VIDEO_PATH)
-            model = YOLO(MODEL_PATH)
-            frame_count = 0
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            self.log_status(f"Video loaded: {total_frames} frames to process")
+            self.log_status("Step 2/3: Running raid extraction...")
+            self.log_status(">>> Detecting players, tracking raids, extracting metrics <<<")
             
-            self.log_status("Step 4/6: Initializing tracking algorithms...")
+            # Import and run data extractor
+            sys.path.append(os.path.join(root_dir, "scripts"))
+            from scripts.data_extract import DataExtractor
             
-            def point_side(p1, p2, x, y):
-                return np.sign((p2[0] - p1[0]) * (y - p1[1]) - (p2[1] - p1[1]) * (x - p1[0]))
+            extractor = DataExtractor(VIDEO_PATH)
+            raids = extractor.extract_data(display=False)
             
-            player_baseline_side = {}
-            baseline_counter = {}
-            raider_track_id = None
-            raider_start_side = None
-            raid_active = False
-            raid_count = 0
+            self.log_status(f"Extraction complete! Total raids: {len(raids)}")
             
-            # Create output directory
-            os.makedirs("sample_output_frame", exist_ok=True)
+            self.log_status("Step 3/3: Saving results...")
+            output_path = VIDEO_PATH.replace('.mp4', '_raid_metrics.csv')
+            extractor.save_results(output_path)
             
-            self.log_status("Step 5/6: Processing video frames...")
-            self.log_status(">>> Detecting players, tracking movements, identifying raids <<<")
+            # Copy to extracted folder
+            extracted_dir = os.path.join("data", "extracted")
+            os.makedirs(extracted_dir, exist_ok=True)
+            extracted_path = os.path.join(extracted_dir, "extracted_data.csv")
+            shutil.copy2(output_path, extracted_path)
             
-            while True:
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                frame_count += 1
-                progress = (frame_count / total_frames) * 100
-                
-                # Draw midline
-                cv2.line(frame, p1, p2, (0,255,255), 2)
-                
-                # Run AI detection and tracking
-                results = model.track(frame, persist=True, conf=0.4, classes=[0], tracker="bytetrack.yaml")
-                
-                if results and results[0].boxes.id is not None:
-                    for box in results[0].boxes:
-                        x1,y1,x2,y2 = map(int, box.xyxy[0])
-                        tid = int(box.id[0])
-                        cx = (x1 + x2)//2
-                        cy = (y1 + y2)//2
-                        side = point_side(p1, p2, cx, cy)
-                        
-                        # Draw player detection
-                        cv2.rectangle(frame,(x1,y1),(x2,y2),(0,255,0),1)
-                        cv2.putText(frame,f"ID {tid}",(x1,y1-5), cv2.FONT_HERSHEY_SIMPLEX,0.4,(0,255,0),1)
-                        
-                        # Track player baseline
-                        if tid not in player_baseline_side:
-                            player_baseline_side[tid] = side
-                            baseline_counter[tid] = 1
-                        else:
-                            if side == player_baseline_side[tid]:
-                                baseline_counter[tid] += 1
-                        
-                        # Detect raid start
-                        if (not raid_active and baseline_counter.get(tid, 0) >= 5 and side != player_baseline_side[tid]):
-                            raider_track_id = tid
-                            raider_start_side = player_baseline_side[tid]
-                            raid_active = True
-                            raid_count += 1
-                            self.log_status(f"RAID {raid_count} DETECTED | Raider ID: {tid} | Frame: {frame_count}")
-                        
-                        # Track active raider
-                        if raid_active and tid == raider_track_id:
-                            cv2.rectangle(frame,(x1,y1),(x2,y2),(0,0,255),3)
-                            cv2.putText(frame,"RAIDER",(x1,y1-10), cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,0,255),2)
-                            
-                            # Detect raid end
-                            if side == raider_start_side:
-                                self.log_status(f"RAID {raid_count} ENDED | Frame: {frame_count}")
-                                raid_active = False
-                                raider_track_id = None
-                                raider_start_side = None
-                                player_baseline_side.clear()
-                                baseline_counter.clear()
-                
-                # Save progress frames
-                if frame_count % 30 == 0:
-                    cv2.imwrite(f"sample_output_frame/progress_frame_{frame_count}.jpg", frame)
-                    self.log_status(f"Progress: {progress:.1f}% | Frame {frame_count}/{total_frames} | Raids detected: {raid_count}")
-            
-            cap.release()
-            self.log_status("Step 6/6: Finalizing results...")
-            self.log_status(f"Processing complete! Total raids detected: {raid_count}")
-            self.log_status(f"Output frames saved: Check sample_output_frame/ directory")
+            self.log_status(f"Results saved to: {output_path}")
+            self.log_status(f"Copied to: {extracted_path}")
             self.log_status("=== VIDEO PROCESSING COMPLETED SUCCESSFULLY ===")
+            
+            # Show extracted data and ask user for additional details
+            self.show_extracted_data_dialog(raids, extracted_path)
                 
         except Exception as e:
             self.log_status(f"Error in video processing: {str(e)}")
+            import traceback
+            traceback.print_exc()
             
     def run_full_pipeline(self):
         if not hasattr(self, 'video_path'):
             messagebox.showerror("Error", "Please select a video file first!")
             return
-            
+        
+        # Store the selected video path for full pipeline
+        self.current_video_path = self.video_path
         self.log_status("=== FULL PIPELINE EXECUTION ===")
         self.log_status("This will run: Setup Midline → Process Video automatically")
         self.log_status("Phase 1: Setting up midline configuration...")
@@ -621,7 +556,7 @@ class KabaddiAnalyticsApp:
         
     def full_pipeline_thread(self):
         # Phase 1: Setup
-        self.run_setup_midline()
+        self.run_setup_play_area()
         
         # Check if setup was successful
         if "SETUP COMPLETED SUCCESSFULLY" in self.status_text.get("1.0", tk.END):
@@ -630,14 +565,133 @@ class KabaddiAnalyticsApp:
             
             if "PROCESSING COMPLETED SUCCESSFULLY" in self.status_text.get("1.0", tk.END):
                 self.log_status("=== FULL PIPELINE COMPLETED SUCCESSFULLY ===")
-                self.log_status("Midline configured and saved")
-                self.log_status("Video processed and raids detected")
-                self.log_status("Output frames generated")
+                self.log_status("Play area configured and saved")
+                self.log_status("Video processed and raid metrics extracted")
+                self.log_status("Results saved to CSV")
             else:
                 self.log_status("Pipeline failed at video processing stage")
         else:
-            self.log_status("Pipeline failed at midline setup stage")
+            self.log_status("Pipeline failed at play area setup stage")
             
+    def show_extracted_data_dialog(self, raids, csv_path):
+        """Show extracted raid data and ask user if they want to add to rankings"""
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Extracted Raid Data")
+        dialog.geometry("900x700")
+        dialog.configure(bg='#ecf0f1')
+        
+        # Title
+        tk.Label(dialog, text="Raid Extraction Complete!", font=("Arial", 16, "bold"), bg='#ecf0f1').pack(pady=10)
+        
+        # Display extracted data
+        data_frame = tk.LabelFrame(dialog, text="Extracted Raids", font=("Arial", 12, "bold"), padx=10, pady=10)
+        data_frame.pack(fill='both', expand=True, padx=10, pady=5)
+        
+        # Treeview for raids
+        columns = ('Raider ID', 'Duration', 'Max Penetration', 'Crossed Bonus', 'Crossed Baulk', 'Avg Speed')
+        tree = ttk.Treeview(data_frame, columns=columns, show='headings', height=8)
+        
+        for col in columns:
+            tree.heading(col, text=col)
+            tree.column(col, width=120)
+        
+        for raid in raids:
+            tree.insert('', 'end', values=(
+                raid['raider_id'],
+                f"{raid['duration']:.2f}s",
+                f"{raid['max_penetration']:.1f}px",
+                'Yes' if raid['crossed_bonus'] else 'No',
+                'Yes' if raid['crossed_baulk'] else 'No',
+                f"{raid['avg_speed']:.1f}px/s"
+            ))
+        
+        tree.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # Form for additional details (shown immediately)
+        form_frame = tk.LabelFrame(dialog, text="Enter Details to Add to Rankings", font=("Arial", 12, "bold"), padx=20, pady=10)
+        form_frame.pack(fill='x', padx=10, pady=5)
+        
+        # Match ID
+        tk.Label(form_frame, text="Match ID:", font=("Arial", 10)).grid(row=0, column=0, sticky='w', pady=5, padx=5)
+        match_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
+        match_entry.grid(row=0, column=1, pady=5, padx=5)
+        match_entry.insert(0, "M_Video")
+        
+        # Player ID
+        tk.Label(form_frame, text="Player ID:", font=("Arial", 10)).grid(row=1, column=0, sticky='w', pady=5, padx=5)
+        player_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
+        player_entry.grid(row=1, column=1, pady=5, padx=5)
+        player_entry.insert(0, f"P{raids[0]['raider_id']}" if raids else "P1")
+        
+        # Raid Points
+        tk.Label(form_frame, text="Raid Points (comma-separated):", font=("Arial", 10)).grid(row=2, column=0, sticky='w', pady=5, padx=5)
+        points_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
+        points_entry.grid(row=2, column=1, pady=5, padx=5)
+        points_entry.insert(0, ",".join(["1" if r['crossed_baulk'] else "0" for r in raids]))
+        tk.Label(form_frame, text="(e.g., 1,2,0,3)", font=("Arial", 8), fg='gray').grid(row=2, column=2, sticky='w', padx=5)
+        
+        # Success
+        tk.Label(form_frame, text="Success (comma-separated 1/0):", font=("Arial", 10)).grid(row=3, column=0, sticky='w', pady=5, padx=5)
+        success_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
+        success_entry.grid(row=3, column=1, pady=5, padx=5)
+        success_entry.insert(0, ",".join(["1" if r['crossed_baulk'] else "0" for r in raids]))
+        tk.Label(form_frame, text="(e.g., 1,1,0,1)", font=("Arial", 8), fg='gray').grid(row=3, column=2, sticky='w', padx=5)
+        
+        def add_to_rankings():
+            try:
+                match_id = match_entry.get().strip()
+                player_id = player_entry.get().strip()
+                points_str = points_entry.get().strip()
+                success_str = success_entry.get().strip()
+                
+                if not match_id or not player_id:
+                    messagebox.showerror("Error", "Match ID and Player ID are required!")
+                    return
+                
+                # Parse points and success
+                points_list = [int(p.strip()) for p in points_str.split(',')]
+                success_list = [int(s.strip()) for s in success_str.split(',')]
+                
+                if len(points_list) != len(raids) or len(success_list) != len(raids):
+                    messagebox.showerror("Error", f"Please provide exactly {len(raids)} values for points and success!")
+                    return
+                
+                # Add raids to data
+                for i, raid in enumerate(raids):
+                    self.data.append({
+                        'match_id': match_id,
+                        'player_id': player_id,
+                        'raid_duration_sec': raid['duration'],
+                        'penetration_px': raid['max_penetration'],
+                        'success': success_list[i],
+                        'raid_points': points_list[i]
+                    })
+                
+                self.save_data()
+                self.update_rankings()
+                self.update_display()
+                
+                dialog.destroy()
+                self.log_status(f"Added {len(raids)} raids for player {player_id} to rankings!")
+                messagebox.showinfo("Success", f"Successfully added {len(raids)} raids to rankings!")
+                
+            except ValueError:
+                messagebox.showerror("Error", "Invalid input! Please enter valid numbers.")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to add data: {str(e)}")
+        
+        def skip():
+            dialog.destroy()
+            self.log_status("Extracted data not added to rankings")
+        
+        # Buttons
+        button_frame = tk.Frame(dialog, bg='#ecf0f1')
+        button_frame.pack(pady=15)
+        
+        tk.Button(button_frame, text="Add to Rankings", command=add_to_rankings,
+                 bg='#27ae60', fg='white', font=("Arial", 11), padx=30).pack(side='left', padx=10)
+        tk.Button(button_frame, text="Skip", command=skip,
+                 bg='#e74c3c', fg='white', font=("Arial", 11), padx=30).pack(side='left', padx=10)
     def delete_player_data(self):
         try:
             player_id = self.delete_player_entry.get().strip()
@@ -796,15 +850,20 @@ class KabaddiAnalyticsApp:
         self.canvas.draw()
         
     def view_live_process(self):
-        """Open a window to view live processing frames"""
-        if not os.path.exists("sample_output_frame"):
-            messagebox.showinfo("Info", "No processing frames found. Please run video processing first.")
+        """Open a window to view key frames from raid processing"""
+        keyframes_dir = os.path.join("data", "keyframes")
+        if not os.path.exists(keyframes_dir):
+            messagebox.showinfo("Info", "No key frames found. Please run video processing first.")
             return
             
         # Create new window for live view
         live_window = tk.Toplevel(self.root)
-        live_window.title("Live Process Viewer")
-        live_window.geometry("800x600")
+        live_window.title("Raid Key Frames Viewer")
+        live_window.geometry("900x700")
+        
+        # Title
+        tk.Label(live_window, text="Raid Key Frames", font=("Arial", 16, "bold")).pack(pady=10)
+        tk.Label(live_window, text="Start → Bonus → Baulk → End", font=("Arial", 10)).pack()
         
         # Frame display
         frame_label = tk.Label(live_window)
@@ -815,31 +874,39 @@ class KabaddiAnalyticsApp:
         control_frame.pack(pady=10)
         
         # Get available frames
-        frame_files = [f for f in os.listdir("sample_output_frame") if f.endswith('.jpg')]
-        frame_files.sort(key=lambda x: int(x.split('_')[-1].split('.')[0]))
+        frame_files = [f for f in os.listdir(keyframes_dir) if f.endswith('.jpg')]
+        frame_files.sort(key=lambda x: (int(x.split('_')[1]), x.split('_')[2], int(x.split('_')[-1].split('.')[0])))
         
         if not frame_files:
-            tk.Label(live_window, text="No frames available", font=("Arial", 14)).pack(pady=50)
+            tk.Label(live_window, text="No key frames available", font=("Arial", 14)).pack(pady=50)
             return
             
         current_frame = tk.IntVar(value=0)
         
         def update_frame():
             if frame_files:
-                frame_path = os.path.join("sample_output_frame", frame_files[current_frame.get()])
+                frame_path = os.path.join(keyframes_dir, frame_files[current_frame.get()])
                 if os.path.exists(frame_path):
                     import cv2
                     from PIL import Image, ImageTk
                     
                     img = cv2.imread(frame_path)
                     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    img = cv2.resize(img, (640, 480))
+                    img = cv2.resize(img, (800, 600))
                     
                     photo = ImageTk.PhotoImage(Image.fromarray(img))
                     frame_label.configure(image=photo)
                     frame_label.image = photo
                     
-                    frame_info.set(f"Frame: {frame_files[current_frame.get()]} ({current_frame.get()+1}/{len(frame_files)})")
+                    # Parse filename for info
+                    fname = frame_files[current_frame.get()]
+                    parts = fname.replace('.jpg', '').split('_')
+                    raid_num = parts[1]
+                    event_type = parts[2]
+                    frame_num = parts[-1]
+                    
+                    info_text = f"Raid #{raid_num} - {event_type.upper()} - Frame {frame_num} ({current_frame.get()+1}/{len(frame_files)})"
+                    frame_info.set(info_text)
         
         frame_info = tk.StringVar()
         tk.Label(control_frame, textvariable=frame_info, font=("Arial", 12)).pack(pady=5)
