@@ -16,6 +16,8 @@ import csv
 from PIL import Image, ImageTk
 from analytics.profiling import build_raider_profile
 from analytics.ranking import rank_players, assign_ranks
+from analytics.player_profile import PlayerProfileManager
+from player_dashboard import PlayerDashboard
 
 class KabaddiAnalyticsApp:
     def __init__(self, root):
@@ -23,6 +25,11 @@ class KabaddiAnalyticsApp:
         self.root.title("Kabaddi Analytics System")
         self.root.geometry("1400x900")
         self.root.configure(bg='#2c3e50')
+        
+        # Initialize player profile manager
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        profiles_file = os.path.join(root_dir, 'data', 'player_profiles.json')
+        self.profile_manager = PlayerProfileManager(profiles_file)
         
         # Load synthetic data
         self.load_data()
@@ -32,114 +39,68 @@ class KabaddiAnalyticsApp:
         
     def load_data(self):
         """Load extracted raid data and calculate rankings"""
+        self.data = []
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        
+        # Force load synthetic data
+        csv_path = os.path.join(root_dir, "data", "synthetic", "synthetic_data.csv")
+        print(f"\n{'='*70}")
+        print(f"LOADING DATA FROM: {csv_path}")
+        print(f"File exists: {os.path.exists(csv_path)}")
+        print(f"{'='*70}\n")
+        
         try:
-            self.data = []
-            # First try to load extracted data from real video processing
-            extracted_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "extracted", "extracted_data.csv")
-            
-            if os.path.exists(extracted_path):
-                print(f"Loading extracted data from: {extracted_path}")
-                with open(extracted_path, 'r') as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        try:
-                            # Check if it's the new format (from data_extract.py)
-                            if 'raider_id' in row and 'duration' in row:
-                                self.data.append({
-                                    'match_id': 'Extracted',
-                                    'player_id': str(row['raider_id']),
-                                    'raid_duration_sec': float(row['duration']),
-                                    'penetration_px': float(row['max_penetration']),
-                                    'success': 1 if row.get('crossed_baulk', 'False') == 'True' else 0,
-                                    'raid_points': 1 if row.get('crossed_baulk', 'False') == 'True' else 0
-                                })
-                            # Old format
-                            elif 'player_id' in row and 'duration_sec' in row:
-                                self.data.append({
-                                    'match_id': 'Extracted',
-                                    'player_id': row['player_id'],
-                                    'raid_duration_sec': float(row['duration_sec']),
-                                    'penetration_px': float(row['penetration_px']),
-                                    'success': int(row['success']),
-                                    'raid_points': 1 if int(row['success']) == 1 else 0
-                                })
-                        except (ValueError, KeyError) as e:
-                            print(f"Skipping invalid row: {row} - Error: {e}")
-                            continue
-                
-                if self.data:
-                    print(f"Loaded {len(self.data)} raids from extracted data")
-                    self.update_rankings()
-                    return
-            
-            # Fallback to synthetic data
-            csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "synthetic", "synthetic_data.csv")
             with open(csv_path, 'r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     try:
-                        # Handle empty or invalid values
-                        raid_points = row.get('raid_points', '').strip()
-                        if not raid_points or raid_points == '':
-                            raid_points = 0
-                        else:
-                            raid_points = int(raid_points)
-                        
                         self.data.append({
                             'match_id': row['match_id'],
                             'player_id': row['player_id'],
                             'raid_duration_sec': float(row['raid_duration_sec']),
                             'penetration_px': float(row['penetration_px']),
                             'success': int(row['success']),
-                            'raid_points': raid_points
+                            'raid_points': int(row.get('raid_points', 0) or 0)
                         })
                     except (ValueError, KeyError) as e:
-                        print(f"Skipping invalid row: {row} - Error: {e}")
                         continue
             
-            if not self.data:
-                print("No valid data found, creating sample data...")
-                self.create_sample_data()
-            else:
-                self.update_rankings()
-                
+            print(f"✓ Loaded {len(self.data)} raids")
+            print(f"✓ Unique players: {len(set(row['player_id'] for row in self.data))}")
+            self.update_rankings()
+            
         except FileNotFoundError:
-            print("synthetic_data.csv not found, creating sample data...")
+            print("ERROR: synthetic_data.csv not found!")
             self.create_sample_data()
             
     def create_sample_data(self):
-        """Create realistic synthetic data"""
+        """Create realistic synthetic data: 28 players (7 per team, 4 teams), each played 3+ matches"""
         import random
         
         self.data = []
         
-        # 20+ players with realistic names
-        players = ['R1', 'R2', 'R3', 'R4', 'R5', 'R6', 'R7', 'R8', 'R9', 'R10',
-                  'R11', 'R12', 'R13', 'R14', 'R15', 'R16', 'R17', 'R18', 'R19', 'R20',
-                  'R21', 'R22', 'R23', 'R24', 'R25']
+        # 4 teams, 7 players each = 28 players
+        teams = ['TeamA', 'TeamB', 'TeamC', 'TeamD']
+        players = [f"{team}_P{i}" for team in teams for i in range(1, 8)]
         
-        # 8 matches
-        matches = ['M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8']
+        # 12 matches (each team plays 3 matches minimum)
+        matches = [f'M{i}' for i in range(1, 13)]
+        
+        # Assign matches to teams (each team plays at least 3)
+        team_matches = {team: matches[i*3:(i+1)*3] for i, team in enumerate(teams)}
         
         for player in players:
-            # Each player participates in 6-10 matches randomly
-            player_matches = random.sample(matches, random.randint(6, 8))
+            team = player.split('_')[0]
+            player_matches = team_matches[team]
             
             for match in player_matches:
-                # Each player has 30-200 total raids across all matches
-                raids_in_match = random.randint(4, 25)  # Distributed across matches
+                raids_in_match = random.randint(8, 20)
                 
                 for _ in range(raids_in_match):
-                    # Realistic raid parameters
-                    duration = round(random.uniform(2.0, 8.0), 1)  # 2-8 seconds
-                    penetration = random.randint(100, 250)  # 100-250 pixels
-                    success = random.choice([0, 1])  # Random success
-                    
-                    # Add raid points based on success
-                    if success == 1:
-                        raid_points = random.choices([1, 2, 3, 4, 5], weights=[50, 25, 15, 8, 2])[0]
-                    else:
-                        raid_points = 0
+                    duration = round(random.uniform(2.5, 7.5), 1)
+                    penetration = random.randint(80, 220)
+                    success = random.choices([0, 1], weights=[40, 60])[0]
+                    raid_points = random.choices([1, 2, 3], weights=[60, 30, 10])[0] if success else 0
                     
                     self.data.append({
                         'match_id': match,
@@ -149,40 +110,6 @@ class KabaddiAnalyticsApp:
                         'success': success,
                         'raid_points': raid_points
                     })
-        
-        # Ensure each player has 30-200 total raids
-        player_raid_counts = {}
-        for row in self.data:
-            player_id = row['player_id']
-            player_raid_counts[player_id] = player_raid_counts.get(player_id, 0) + 1
-        
-        # Adjust raid counts to meet requirements
-        for player in players:
-            current_count = player_raid_counts.get(player, 0)
-            target_count = random.randint(30, 200)
-            
-            if current_count < target_count:
-                # Add more raids
-                for _ in range(target_count - current_count):
-                    match = random.choice(player_matches if player in [p for p in players if p in [row['player_id'] for row in self.data]] else matches[:6])
-                    success = random.choice([0, 1])
-                    raid_points = random.choices([1, 2, 3, 4, 5], weights=[50, 25, 15, 8, 2])[0] if success else 0
-                    
-                    self.data.append({
-                        'match_id': match,
-                        'player_id': player,
-                        'raid_duration_sec': round(random.uniform(2.0, 8.0), 1),
-                        'penetration_px': random.randint(100, 250),
-                        'success': success,
-                        'raid_points': raid_points
-                    })
-            elif current_count > target_count:
-                # Remove excess raids
-                player_data = [row for row in self.data if row['player_id'] == player]
-                excess = current_count - target_count
-                to_remove = random.sample(player_data, excess)
-                for row in to_remove:
-                    self.data.remove(row)
         
         self.save_data()
         self.update_rankings()
@@ -400,6 +327,9 @@ class KabaddiAnalyticsApp:
                 self.ranking_tree.column(col, width=80)
         
         self.ranking_tree.pack(fill='both', expand=True, padx=5, pady=5)
+        
+        # Bind double-click to open player dashboard
+        self.ranking_tree.bind('<Double-Button-1>', self.open_player_dashboard)
         
         # Right side - Charts
         chart_frame = tk.LabelFrame(display_frame, text="Performance Charts", 
@@ -619,9 +549,14 @@ class KabaddiAnalyticsApp:
         
         # Player ID
         tk.Label(form_frame, text="Player ID:", font=("Arial", 10)).grid(row=1, column=0, sticky='w', pady=5, padx=5)
-        player_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        player_entry.grid(row=1, column=1, pady=5, padx=5)
-        player_entry.insert(0, f"P{raids[0]['raider_id']}" if raids else "P1")
+        
+        # Dropdown for existing players
+        existing_players = list(set([row['player_id'] for row in self.data]))
+        player_var = tk.StringVar()
+        player_combo = ttk.Combobox(form_frame, textvariable=player_var, width=22, font=("Arial", 10))
+        player_combo['values'] = existing_players
+        player_combo.grid(row=1, column=1, pady=5, padx=5)
+        player_combo.set(f"P{raids[0]['raider_id']}" if raids else "P1")
         
         # Raid Points
         tk.Label(form_frame, text="Raid Points (comma-separated):", font=("Arial", 10)).grid(row=2, column=0, sticky='w', pady=5, padx=5)
@@ -640,7 +575,7 @@ class KabaddiAnalyticsApp:
         def add_to_rankings():
             try:
                 match_id = match_entry.get().strip()
-                player_id = player_entry.get().strip()
+                player_id = player_var.get().strip()
                 points_str = points_entry.get().strip()
                 success_str = success_entry.get().strip()
                 
@@ -1004,6 +939,38 @@ class KabaddiAnalyticsApp:
         self.status_text.insert(tk.END, f"{message}\n")
         self.status_text.see(tk.END)
         self.root.update()
+    
+    def open_player_dashboard(self, event):
+        """Open player dashboard on double-click"""
+        selection = self.ranking_tree.selection()
+        if not selection:
+            return
+        
+        item = self.ranking_tree.item(selection[0])
+        player_id = item['values'][1]  # Player ID is in column 1
+        
+        # Get player profile and stats
+        profile = self.profile_manager.get_profile(player_id)
+        stats = self.player_stats.get(player_id, {})
+        
+        # Add additional stats
+        player_matches = set(row['match_id'] for row in self.data if row['player_id'] == player_id)
+        total_points = sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == player_id)
+        total_raids = stats.get('all_raids', stats.get('raids', 0))
+        avg_points_per_raid = total_points / total_raids if total_raids > 0 else 0
+        
+        stats['total_points'] = total_points
+        stats['avg_points_per_raid'] = avg_points_per_raid
+        stats['total_matches'] = len(player_matches)
+        
+        # Find player's rank score
+        for rank_data in self.final_ranking:
+            if rank_data['player_id'] == player_id:
+                stats['score'] = rank_data['score']
+                break
+        
+        # Open dashboard
+        PlayerDashboard(self.root, player_id, profile, stats, self.profile_manager)
 
 if __name__ == "__main__":
     root = tk.Tk()
