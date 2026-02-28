@@ -23,8 +23,8 @@ def raider_score(profile, weights=None):
             "avg_duration": 0.20
         }
     
-    # Normalize penetration (assuming max ~250px)
-    norm_penetration = min(profile["avg_penetration"] / 250, 1.0)
+    # Normalize penetration (assuming max ~5m)
+    norm_penetration = min(profile["avg_penetration"] / 5.0, 1.0)
     
     # Normalize points (assuming max average ~3 points)
     norm_points = min(profile["avg_points"] / 3.0, 1.0)

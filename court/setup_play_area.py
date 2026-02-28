@@ -16,9 +16,10 @@ steps = [
     "Click 5 corners of PLAY BOX (pentagon, clockwise)",
     "Click 2 points for MIDLINE (left to right)",
     "Click 2 points for BAULK LINE (left to right)",
-    "Click 2 points for BONUS LINE (left to right)"
+    "Click 2 points for BONUS LINE (left to right)",
+    "Click 2 points for END LINE (left to right)"
 ]
-points_needed = [5, 2, 2, 2]
+points_needed = [5, 2, 2, 2, 2]
 
 def mouse_callback(event, x, y, flags, param):
     global points, current_step
@@ -27,7 +28,7 @@ def mouse_callback(event, x, y, flags, param):
         print(f"Point {len(points)}: ({x}, {y})")
 
 if __name__ == "__main__":
-    video_path = "../data/videos/jan1.mp4"
+    video_path = "../data/videos/jan2.mp4"
     
     if len(sys.argv) >= 2:
         video_path = sys.argv[1]
@@ -41,12 +42,13 @@ if __name__ == "__main__":
         sys.exit(1)
     
     print("\n[PLAY AREA SETUP]")
-    print("=" * 60)
+    print("=" * 70)
     print("1. Play Box (5 corners - PENTAGON)")
-    print("2. Midline (2 points)")
-    print("3. Baulk Line (2 points)")
-    print("4. Bonus Line (2 points)")
-    print("=" * 60)
+    print("2. Midline (2 points) - 0m")
+    print("3. Baulk Line (2 points) - 3.75m from midline")
+    print("4. Bonus Line (2 points) - 4.75m from midline")
+    print("5. End Line (2 points) - 6.5m from midline")
+    print("=" * 70)
     
     cv2.namedWindow("Setup Play Area", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Setup Play Area", mouse_callback)
@@ -83,6 +85,11 @@ if __name__ == "__main__":
         if len(points) >= 11:
             cv2.line(display, points[9], points[10], (0, 255, 0), 2)
             cv2.putText(display, "BONUS", points[9], cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+        
+        # Draw end line
+        if len(points) >= 13:
+            cv2.line(display, points[11], points[12], (255, 0, 255), 2)
+            cv2.putText(display, "END LINE", points[11], cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
             cv2.putText(display, "Press ENTER to save", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
         else:
             # Show current instruction
@@ -98,7 +105,7 @@ if __name__ == "__main__":
             current_step += 1
         
         key = cv2.waitKey(1)
-        if key == 13 and len(points) == 11:  # ENTER
+        if key == 13 and len(points) == 13:  # ENTER
             break
         elif key == 27:  # ESC
             print("\nCancelled")
@@ -107,13 +114,14 @@ if __name__ == "__main__":
     
     cv2.destroyAllWindows()
     
-    if len(points) == 11:
+    if len(points) == 13:
         # Save configuration
         config = {
             'play_box': [points[0], points[1], points[2], points[3], points[4]],
             'midline': [points[5], points[6]],
             'baulk_line': [points[7], points[8]],
-            'bonus_line': [points[9], points[10]]
+            'bonus_line': [points[9], points[10]],
+            'end_line': [points[11], points[12]]
         }
         
         config_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config')
@@ -139,5 +147,6 @@ if __name__ == "__main__":
         print(f"Midline: {config['midline']}")
         print(f"Baulk Line: {config['baulk_line']}")
         print(f"Bonus Line: {config['bonus_line']}")
+        print(f"End Line: {config['end_line']}")
     else:
-        print("\nNeed 11 points total")
+        print("\nNeed 13 points total")

@@ -98,7 +98,7 @@ class KabaddiAnalyticsApp:
                 
                 for _ in range(raids_in_match):
                     duration = round(random.uniform(2.5, 7.5), 1)
-                    penetration = random.randint(80, 220)
+                    penetration = round(random.uniform(1.0, 5.0), 2)  # meters
                     success = random.choices([0, 1], weights=[40, 60])[0]
                     raid_points = random.choices([1, 2, 3], weights=[60, 30, 10])[0] if success else 0
                     
@@ -267,7 +267,7 @@ class KabaddiAnalyticsApp:
         self.duration_entry = tk.Entry(input_frame, width=10)
         self.duration_entry.grid(row=1, column=1, padx=5)
         
-        tk.Label(input_frame, text="Penetration (px):").grid(row=1, column=2, padx=5, sticky='w')
+        tk.Label(input_frame, text="Penetration (m):").grid(row=1, column=2, padx=5, sticky='w')
         self.penetration_entry = tk.Entry(input_frame, width=10)
         self.penetration_entry.grid(row=1, column=3, padx=5)
         
@@ -381,11 +381,12 @@ class KabaddiAnalyticsApp:
             self.log_status(f"Using video: {os.path.basename(target_path)}")
             
             self.log_status("Step 2/2: Interactive play area setup...")
-            self.log_status(">>> INSTRUCTION: Click 11 points in order:")
+            self.log_status(">>> INSTRUCTION: Click 13 points in order:")
             self.log_status("    1-5: Play box corners (pentagon, clockwise)")
-            self.log_status("    6-7: Midline (2 points)")
-            self.log_status("    8-9: Baulk line (2 points)")
-            self.log_status("    10-11: Bonus line (2 points)")
+            self.log_status("    6-7: Midline (2 points) - 0m")
+            self.log_status("    8-9: Baulk line (2 points) - 3.75m from midline")
+            self.log_status("    10-11: Bonus line (2 points) - 4.75m from midline")
+            self.log_status("    12-13: End line (2 points) - 6.5m from midline")
             
             # Import and run setup_play_area
             import subprocess
@@ -446,7 +447,7 @@ class KabaddiAnalyticsApp:
             from scripts.data_extract import DataExtractor
             
             extractor = DataExtractor(VIDEO_PATH)
-            raids = extractor.extract_data(display=False)
+            raids = extractor.extract_data(display=True)  # Changed to True to show live processing
             
             self.log_status(f"Extraction complete! Total raids: {len(raids)}")
             
@@ -739,7 +740,7 @@ class KabaddiAnalyticsApp:
                 player_id,
                 f"{rank_data['score']:.3f}",  # Recent score only
                 f"{profile.get('all_success_rate', profile['success_rate']):.2f}",  # Overall SR
-                f"{profile.get('all_avg_penetration', profile['avg_penetration']):.0f}",  # Overall penetration
+                f"{profile.get('all_avg_penetration', profile['avg_penetration']):.2f}",  # Overall penetration in meters
                 f"{profile.get('all_avg_duration', profile['avg_duration']):.1f}",  # Overall duration
                 total_points,  # Total points
                 total_raids,  # Total raids
@@ -773,7 +774,7 @@ class KabaddiAnalyticsApp:
         penetrations = [self.player_stats[p].get('all_avg_penetration', self.player_stats[p]['avg_penetration']) for p in players]
         self.ax3.bar(players, penetrations, color='#e74c3c')
         self.ax3.set_title('Average Penetration (Overall)')
-        self.ax3.set_ylabel('Penetration (px)')
+        self.ax3.set_ylabel('Penetration (m)')
         
         # Chart 4: Total Points
         total_points = [sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == p) for p in players]

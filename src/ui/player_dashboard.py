@@ -109,7 +109,7 @@ class PlayerDashboard:
         stats_data = [
             ("Total Raids", self.stats.get('all_raids', 0)),
             ("Success Rate", f"{self.stats.get('all_success_rate', 0):.1f}%"),
-            ("Avg Penetration", f"{self.stats.get('all_avg_penetration', 0):.0f} px"),
+            ("Avg Penetration", f"{self.stats.get('all_avg_penetration', 0):.2f} m"),
             ("Avg Duration", f"{self.stats.get('all_avg_duration', 0):.1f} sec"),
             ("Total Points", self.stats.get('total_points', 0)),
             ("Avg Points/Raid", f"{self.stats.get('avg_points_per_raid', 0):.2f}"),
@@ -133,7 +133,7 @@ class PlayerDashboard:
         categories = ['Efficiency', 'Aggression', 'Impact', 'Control', 'Consistency']
         
         # Elite performance thresholds
-        ELITE_PENETRATION = 200
+        ELITE_PENETRATION = 5.0  # meters
         ELITE_POINTS_PER_RAID = 3.0
         ELITE_RAIDS_PER_MATCH = 15
         
@@ -199,24 +199,18 @@ class PlayerDashboard:
         ax.plot(x_data, y_data, 'o-', linewidth=3, color='#e74c3c', markersize=10)
         ax.fill(x_data, y_data, alpha=0.35, color='#e74c3c')
         
-        # Add category labels at vertices
-        for i, (angle, label) in enumerate(zip(angles, categories)):
-            label_radius = MAX_RADIUS * 1.15
-            x_label = label_radius * np.cos(angle)
-            y_label = label_radius * np.sin(angle)
-            ax.text(x_label, y_label, label, ha='center', va='center', 
-                   size=11, weight='bold', bbox=dict(boxstyle='round,pad=0.3', 
-                   facecolor='white', edgecolor='gray', alpha=0.8))
+        # Add category labels
+        label_distance = MAX_RADIUS * 1.15
+        for i, (angle, category) in enumerate(zip(angles, categories)):
+            x = label_distance * np.cos(angle)
+            y = label_distance * np.sin(angle)
+            ax.text(x, y, category, ha='center', va='center', size=11, weight='bold')
         
-        # Set equal aspect and limits
-        ax.set_xlim(-130, 130)
-        ax.set_ylim(-130, 130)
+        # Configure axes
+        ax.set_xlim(-MAX_RADIUS * 1.3, MAX_RADIUS * 1.3)
+        ax.set_ylim(-MAX_RADIUS * 1.3, MAX_RADIUS * 1.3)
         ax.set_aspect('equal')
         ax.axis('off')
-        
-        # Title
-        ax.set_title(f"{self.profile.name}\nPerformance Pentagon", 
-                    weight='bold', size=14, pad=10, color='#2c3e50')
         
         # Embed in tkinter
         canvas = FigureCanvasTkAgg(fig, parent)
@@ -224,39 +218,39 @@ class PlayerDashboard:
         canvas.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
     
     def edit_profile(self):
-        """Open edit dialog for player profile"""
+        """Open dialog to edit player profile"""
         edit_window = tk.Toplevel(self.window)
-        edit_window.title("Edit Player Profile")
+        edit_window.title(f"Edit Profile - {self.player_id}")
         edit_window.geometry("400x200")
         edit_window.configure(bg='#ecf0f1')
         
-        tk.Label(edit_window, text="Edit Player Information", 
-                font=("Arial", 14, "bold"), bg='#ecf0f1').pack(pady=10)
-        
-        form_frame = tk.Frame(edit_window, bg='#ecf0f1')
-        form_frame.pack(pady=10)
-        
-        tk.Label(form_frame, text="Name:", font=("Arial", 11), bg='#ecf0f1').grid(row=0, column=0, sticky='w', padx=5, pady=5)
-        name_entry = tk.Entry(form_frame, width=30, font=("Arial", 11))
-        name_entry.grid(row=0, column=1, padx=5, pady=5)
+        tk.Label(edit_window, text="Name:", font=("Arial", 11), bg='#ecf0f1').grid(row=0, column=0, padx=10, pady=10, sticky='w')
+        name_entry = tk.Entry(edit_window, font=("Arial", 11), width=25)
         name_entry.insert(0, self.profile.name)
+        name_entry.grid(row=0, column=1, padx=10, pady=10)
         
-        tk.Label(form_frame, text="Team:", font=("Arial", 11), bg='#ecf0f1').grid(row=1, column=0, sticky='w', padx=5, pady=5)
-        team_entry = tk.Entry(form_frame, width=30, font=("Arial", 11))
-        team_entry.grid(row=1, column=1, padx=5, pady=5)
+        tk.Label(edit_window, text="Team:", font=("Arial", 11), bg='#ecf0f1').grid(row=1, column=0, padx=10, pady=10, sticky='w')
+        team_entry = tk.Entry(edit_window, font=("Arial", 11), width=25)
         team_entry.insert(0, self.profile.team)
+        team_entry.grid(row=1, column=1, padx=10, pady=10)
         
         def save_changes():
-            name = name_entry.get().strip()
-            team = team_entry.get().strip()
+            new_name = name_entry.get().strip()
+            new_team = team_entry.get().strip()
             
-            if name:
-                self.profile_manager.update_profile(self.player_id, name=name, team=team)
-                messagebox.showinfo("Success", "Profile updated successfully!")
-                edit_window.destroy()
-                self.window.destroy()
-            else:
-                messagebox.showerror("Error", "Name cannot be empty!")
+            if not new_name:
+                messagebox.showerror("Error", "Name cannot be empty")
+                return
+            
+            self.profile.name = new_name
+            self.profile.team = new_team
+            self.profile_manager.save_profiles()
+            
+            messagebox.showinfo("Success", "Profile updated successfully")
+            edit_window.destroy()
+            self.window.destroy()
         
-        tk.Button(edit_window, text="Save", command=save_changes,
-                 bg='#27ae60', fg='white', font=("Arial", 11), padx=20).pack(pady=10)
+        tk.Button(edit_window, text="Save", command=save_changes, bg='#27ae60', fg='white', 
+                 font=("Arial", 11), width=10).grid(row=2, column=0, padx=10, pady=20)
+        tk.Button(edit_window, text="Cancel", command=edit_window.destroy, bg='#95a5a6', fg='white',
+                 font=("Arial", 11), width=10).grid(row=2, column=1, padx=10, pady=20)

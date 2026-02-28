@@ -18,6 +18,11 @@ import json
 class DataExtractor:
     def __init__(self, video_path):
         self.video_path = video_path
+        
+        # Check if video exists
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video not found: {video_path}")
+        
         model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "yolov8n-pose.pt")
         self.model = YOLO(model_path)
         
@@ -31,7 +36,12 @@ class DataExtractor:
         self.p1, self.p2 = tuple(self.court_dynamics.midline[0]), tuple(self.court_dynamics.midline[1])
         
         self.cap = cv2.VideoCapture(video_path)
+        if not self.cap.isOpened():
+            raise RuntimeError(f"Failed to open video: {video_path}")
+        
         self.fps = self.cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        print(f"✓ Video loaded: {total_frames} frames @ {self.fps:.2f} FPS")
         
         self.metrics_extractor = RaidMetricsExtractor(self.court_dynamics, self.fps)
         
@@ -55,6 +65,10 @@ class DataExtractor:
         frame_count = 0
         all_players = {}
         DISPLAY_SCALE = 0.6
+        
+        print(f"Video FPS: {self.fps}")
+        print(f"Midline: {self.p1} -> {self.p2}")
+        print(f"Play box: {self.court_dynamics.play_box}")
         
         if display:
             cv2.namedWindow("Data Extraction", cv2.WINDOW_NORMAL)
@@ -100,6 +114,10 @@ class DataExtractor:
             
             current_frame_players = set()
             raider_detected_this_frame = False
+            
+            # Debug: Print detection info every 30 frames
+            if frame_count % 30 == 0:
+                print(f"Frame {frame_count}: Detected {len(results[0].boxes) if results and results[0].boxes.id is not None else 0} players, Tracking {len(all_players)} players")
             
             if results and results[0].boxes.id is not None:
                 for i, box in enumerate(results[0].boxes):
@@ -167,7 +185,11 @@ class DataExtractor:
                         smooth_cy = int(alpha * cy + (1 - alpha) * last_pos[1])
                         cx, cy = smooth_cx, smooth_cy
                     
-                    all_players[tid]['positions'].append((cx, cy, frame_count))
+                    # Use bottom center (feet) for penetration calculation
+                    feet_x = (x1 + x2) // 2
+                    feet_y = y2  # Bottom of bounding box
+                    
+                    all_players[tid]['positions'].append((feet_x, feet_y, frame_count))
                     all_players[tid]['keypoints'].append(keypoints)
                     all_players[tid]['side_history'].append(side)
                     
@@ -187,6 +209,7 @@ class DataExtractor:
                         most_common = max(side_counts, key=side_counts.get)
                         if side_counts[most_common] >= 11:
                             all_players[tid]['baseline_side'] = most_common
+                            print(f"✓ Player {tid} baseline established: side={most_common}")
                     
                     # Raider locking - STRICT to prevent ID switching
                     is_raider = False
@@ -201,6 +224,7 @@ class DataExtractor:
                                 opposite_count = sum(1 for s in recent_sides if s != all_players[tid]['baseline_side'])
                                 if opposite_count >= 6:
                                     is_raider = True
+                                    print(f"🎯 Raid detected! Player {tid} crossed midline (baseline={all_players[tid]['baseline_side']}, current_side={side})")
                     
                     # Draw player with keypoints for ALL players
                     if is_raider:
@@ -393,7 +417,7 @@ class DataExtractor:
         metrics = self.metrics_extractor.extract_raid_metrics(self.current_raid)
         self.raids.append(metrics)
         
-        print(f"✅ Raid ended - Duration: {metrics['duration']:.2f}s, Penetration: {metrics['max_penetration']:.1f}px")
+        print(f"✅ Raid ended - Duration: {metrics['duration']:.2f}s, Penetration: {metrics['max_penetration']:.2f}m")
         
         self.raid_active = False
         self.raider_id = None
@@ -406,7 +430,7 @@ class DataExtractor:
 
 
 if __name__ == "__main__":
-    video_path = "../data/videos/jan1.mp4"
+    video_path = "../data/videos/jan2.mp4"
     
     if len(sys.argv) >= 2:
         video_path = sys.argv[1]
@@ -416,11 +440,17 @@ if __name__ == "__main__":
         print("🎬 Starting data extraction...")
         raids = extractor.extract_data(display=True)
         
-        output_path = video_path.replace('.mp4', '_raid_metrics.csv')
+        # Save to data/extracted directory
+        video_name = os.path.splitext(os.path.basename(video_path))[0]
+        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "extracted")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, f"{video_name}_raid_metrics.csv")
+        
         extractor.save_results(output_path)
         
         print(f"\n📊 Extraction complete!")
         print(f"Total raids: {len(raids)}")
+        print(f"Saved to: {output_path}")
         
     except Exception as e:
         print(f"❌ Error: {e}")
