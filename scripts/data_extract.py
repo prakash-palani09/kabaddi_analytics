@@ -100,6 +100,12 @@ class DataExtractor:
             bo2 = tuple(self.court_dynamics.bonus_line[1].astype(int))
             cv2.line(frame, bo1, bo2, (0, 255, 0), 2)
             
+            # Draw end line
+            e1 = tuple(self.court_dynamics.end_line[0].astype(int))
+            e2 = tuple(self.court_dynamics.end_line[1].astype(int))
+            cv2.line(frame, e1, e2, (255, 0, 255), 2)
+            cv2.putText(frame, "END", e1, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
+            
             # Enhanced tracking with multi-scale detection for far players
             results = self.model.track(
                 frame, 
@@ -189,7 +195,27 @@ class DataExtractor:
                     feet_x = (x1 + x2) // 2
                     feet_y = y2  # Bottom of bounding box
                     
-                    all_players[tid]['positions'].append((feet_x, feet_y, frame_count))
+                    # Track maximum penetration from ANY body part
+                    max_penetration_point = (feet_x, feet_y)
+                    max_penetration_depth = self.court_dynamics.get_penetration_depth((feet_x, feet_y))
+                    
+                    # Check all keypoints for maximum penetration
+                    if keypoints is not None:
+                        for kpt in keypoints:
+                            if kpt[0] > 0 and kpt[1] > 0:
+                                kpt_depth = self.court_dynamics.get_penetration_depth((int(kpt[0]), int(kpt[1])))
+                                if kpt_depth > max_penetration_depth:
+                                    max_penetration_depth = kpt_depth
+                                    max_penetration_point = (int(kpt[0]), int(kpt[1]))
+                    
+                    # Also check bounding box corners for extended limbs
+                    for corner in [(x1, y2), (x2, y2), (feet_x, y2)]:
+                        corner_depth = self.court_dynamics.get_penetration_depth(corner)
+                        if corner_depth > max_penetration_depth:
+                            max_penetration_depth = corner_depth
+                            max_penetration_point = corner
+                    
+                    all_players[tid]['positions'].append((max_penetration_point[0], max_penetration_point[1], frame_count))
                     all_players[tid]['keypoints'].append(keypoints)
                     all_players[tid]['side_history'].append(side)
                     
@@ -283,7 +309,9 @@ class DataExtractor:
                     if len(recent_sides) >= 5:
                         baseline_count = sum(1 for s in recent_sides if s == all_players[self.raider_id]['baseline_side'])
                         if baseline_count >= 4:
-                            print(f"🔙 Raider returned to baseline, ending raid")
+                            print(f"🔙 Raider returned to baseline, ending raid (SUCCESS)")
+                            # Mark as successful return
+                            self.current_raid['returned_to_baseline'] = True
                             # Save key frame: Raid End
                             cv2.imwrite(f"{self.keyframes_dir}/raid_{len(self.raids)+1}_end_frame_{frame_count}.jpg", frame)
                             self.end_raid(frame_count, all_players)
@@ -417,7 +445,8 @@ class DataExtractor:
         metrics = self.metrics_extractor.extract_raid_metrics(self.current_raid)
         self.raids.append(metrics)
         
-        print(f"✅ Raid ended - Duration: {metrics['duration']:.2f}s, Penetration: {metrics['max_penetration']:.2f}m")
+        success_status = "SUCCESS" if metrics.get('success', 0) == 1 else "INCOMPLETE"
+        print(f"✅ Raid ended ({success_status}) - Duration: {metrics['duration']:.2f}s, Max Penetration: {metrics['max_penetration']:.2f}m")
         
         self.raid_active = False
         self.raider_id = None

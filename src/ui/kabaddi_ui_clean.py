@@ -186,6 +186,11 @@ class KabaddiAnalyticsApp:
         title.pack(pady=20)
         
         # Create notebook for tabs
+        style = ttk.Style()
+        style.theme_use('clam')
+        style.configure('TNotebook', background='#34495e', borderwidth=0)
+        style.configure('TNotebook.Tab', padding=[20, 10], font=('Arial', 11, 'bold'))
+        
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill='both', expand=True, padx=20, pady=10)
         
@@ -198,6 +203,11 @@ class KabaddiAnalyticsApp:
         self.ranking_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.ranking_frame, text="Player Rankings")
         self.create_ranking_tab()
+        
+        # Analytics Tab
+        self.analytics_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.analytics_frame, text="Analytics")
+        self.create_analytics_tab()
         
     def create_video_tab(self):
         # Video upload section
@@ -220,20 +230,14 @@ class KabaddiAnalyticsApp:
         button_frame = tk.Frame(upload_frame)
         button_frame.pack(fill='x', pady=10)
         
-        tk.Button(button_frame, text="Setup Midline", command=self.setup_midline,
-                 bg='#e74c3c', fg='white', font=("Arial", 12)).pack(side='left', padx=5)
-        
         tk.Button(button_frame, text="Setup Court Lines", command=self.setup_court_lines,
-                 bg='#e67e22', fg='white', font=("Arial", 12)).pack(side='left', padx=5)
+                 bg='#e67e22', fg='white', font=("Arial", 14, "bold"), padx=20, pady=10).pack(side='left', padx=10)
         
         tk.Button(button_frame, text="Process Video", command=self.process_video,
-                 bg='#27ae60', fg='white', font=("Arial", 12)).pack(side='left', padx=5)
-        
-        tk.Button(button_frame, text="Full Pipeline", command=self.run_full_pipeline,
-                 bg='#9b59b6', fg='white', font=("Arial", 12)).pack(side='left', padx=5)
+                 bg='#27ae60', fg='white', font=("Arial", 14, "bold"), padx=20, pady=10).pack(side='left', padx=10)
         
         tk.Button(button_frame, text="View Live Process", command=self.view_live_process,
-                 bg='#f39c12', fg='white', font=("Arial", 12)).pack(side='left', padx=5)
+                 bg='#3498db', fg='white', font=("Arial", 14, "bold"), padx=20, pady=10).pack(side='left', padx=10)
         
         # Status display
         self.status_text = tk.Text(upload_frame, height=15, width=80)
@@ -302,18 +306,18 @@ class KabaddiAnalyticsApp:
         self.create_rankings_display()
         
     def create_rankings_display(self):
-        # Rankings table and chart
+        # Rankings table only
         display_frame = tk.Frame(self.ranking_frame)
         display_frame.pack(fill='both', expand=True, padx=10, pady=5)
         
-        # Left side - Rankings table
+        # Rankings table
         table_frame = tk.LabelFrame(display_frame, text="Player Rankings", 
                                   font=("Arial", 12, "bold"))
-        table_frame.pack(side='left', fill='both', expand=True, padx=5)
+        table_frame.pack(fill='both', expand=True, padx=5)
         
         # Treeview for rankings
         columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration', 'Avg Duration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
-        self.ranking_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
+        self.ranking_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
         
         # Store sort direction for each column
         self.sort_reverse = {col: False for col in columns}
@@ -326,23 +330,14 @@ class KabaddiAnalyticsApp:
             else:
                 self.ranking_tree.column(col, width=80)
         
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=self.ranking_tree.yview)
+        self.ranking_tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side='right', fill='y')
         self.ranking_tree.pack(fill='both', expand=True, padx=5, pady=5)
         
         # Bind double-click to open player dashboard
         self.ranking_tree.bind('<Double-Button-1>', self.open_player_dashboard)
-        
-        # Right side - Charts
-        chart_frame = tk.LabelFrame(display_frame, text="Performance Charts", 
-                                  font=("Arial", 12, "bold"))
-        chart_frame.pack(side='right', fill='both', expand=True, padx=5)
-        
-        # Create matplotlib figure
-        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4)) = plt.subplots(2, 2, figsize=(8, 6))
-        self.fig.patch.set_facecolor('white')
-        
-        self.canvas = FigureCanvasTkAgg(self.fig, chart_frame)
-        self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill='both', expand=True, padx=5, pady=5)
         
         # Initial display
         self.update_display()
@@ -559,29 +554,36 @@ class KabaddiAnalyticsApp:
         player_combo.grid(row=1, column=1, pady=5, padx=5)
         player_combo.set(f"P{raids[0]['raider_id']}" if raids else "P1")
         
+        # Team Name
+        tk.Label(form_frame, text="Team Name:", font=("Arial", 10)).grid(row=2, column=0, sticky='w', pady=5, padx=5)
+        team_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
+        team_entry.grid(row=2, column=1, pady=5, padx=5)
+        team_entry.insert(0, "Team_A")
+        
         # Raid Points
-        tk.Label(form_frame, text="Raid Points (comma-separated):", font=("Arial", 10)).grid(row=2, column=0, sticky='w', pady=5, padx=5)
+        tk.Label(form_frame, text="Raid Points (comma-separated):", font=("Arial", 10)).grid(row=3, column=0, sticky='w', pady=5, padx=5)
         points_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        points_entry.grid(row=2, column=1, pady=5, padx=5)
+        points_entry.grid(row=3, column=1, pady=5, padx=5)
         points_entry.insert(0, ",".join(["1" if r['crossed_baulk'] else "0" for r in raids]))
-        tk.Label(form_frame, text="(e.g., 1,2,0,3)", font=("Arial", 8), fg='gray').grid(row=2, column=2, sticky='w', padx=5)
+        tk.Label(form_frame, text="(e.g., 1,2,0,3)", font=("Arial", 8), fg='gray').grid(row=3, column=2, sticky='w', padx=5)
         
         # Success
-        tk.Label(form_frame, text="Success (comma-separated 1/0):", font=("Arial", 10)).grid(row=3, column=0, sticky='w', pady=5, padx=5)
+        tk.Label(form_frame, text="Success (comma-separated 1/0):", font=("Arial", 10)).grid(row=4, column=0, sticky='w', pady=5, padx=5)
         success_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        success_entry.grid(row=3, column=1, pady=5, padx=5)
+        success_entry.grid(row=4, column=1, pady=5, padx=5)
         success_entry.insert(0, ",".join(["1" if r['crossed_baulk'] else "0" for r in raids]))
-        tk.Label(form_frame, text="(e.g., 1,1,0,1)", font=("Arial", 8), fg='gray').grid(row=3, column=2, sticky='w', padx=5)
+        tk.Label(form_frame, text="(e.g., 1,1,0,1)", font=("Arial", 8), fg='gray').grid(row=4, column=2, sticky='w', padx=5)
         
         def add_to_rankings():
             try:
                 match_id = match_entry.get().strip()
                 player_id = player_var.get().strip()
+                team_name = team_entry.get().strip()
                 points_str = points_entry.get().strip()
                 success_str = success_entry.get().strip()
                 
-                if not match_id or not player_id:
-                    messagebox.showerror("Error", "Match ID and Player ID are required!")
+                if not match_id or not player_id or not team_name:
+                    messagebox.showerror("Error", "Match ID, Player ID, and Team Name are required!")
                     return
                 
                 # Parse points and success
@@ -717,6 +719,20 @@ class KabaddiAnalyticsApp:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add data: {str(e)}")
             
+    def create_analytics_tab(self):
+        """Create analytics tab with charts"""
+        # Create matplotlib figure with better spacing
+        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4)) = plt.subplots(2, 2, figsize=(12, 8))
+        self.fig.patch.set_facecolor('white')
+        self.fig.tight_layout(pad=3.0)
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, self.analytics_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
+        
+        # Initial chart update
+        self.update_charts()
+        
     def update_display(self):
         # Clear existing items
         for item in self.ranking_tree.get_children():
@@ -738,51 +754,68 @@ class KabaddiAnalyticsApp:
             self.ranking_tree.insert('', 'end', values=(
                 rank_data['rank'],
                 player_id,
-                f"{rank_data['score']:.3f}",  # Recent score only
-                f"{profile.get('all_success_rate', profile['success_rate']):.2f}",  # Overall SR
-                f"{profile.get('all_avg_penetration', profile['avg_penetration']):.2f}",  # Overall penetration in meters
-                f"{profile.get('all_avg_duration', profile['avg_duration']):.1f}",  # Overall duration
-                total_points,  # Total points
-                total_raids,  # Total raids
-                f"{avg_points_per_raid:.2f}",  # Avg points per raid
-                len(player_matches)  # Total matches
+                f"{rank_data['score']:.3f}",
+                f"{profile.get('all_success_rate', profile['success_rate']):.2f}",
+                f"{profile.get('all_avg_penetration', profile['avg_penetration']):.2f}",
+                f"{profile.get('all_avg_duration', profile['avg_duration']):.1f}",
+                total_points,
+                total_raids,
+                f"{avg_points_per_raid:.2f}",
+                len(player_matches)
             ))
         
         # Update charts
         self.update_charts()
         
     def update_charts(self):
+        # Check if axes exist (analytics tab created)
+        if not hasattr(self, 'ax1'):
+            return
+            
         # Clear previous plots
         for ax in [self.ax1, self.ax2, self.ax3, self.ax4]:
             ax.clear()
         
-        players = [r['player_id'] for r in self.final_ranking]
-        scores = [r['score'] for r in self.final_ranking]
+        # Show top 10 players only for better readability
+        top_players = [r['player_id'] for r in self.final_ranking[:10]]
+        scores = [r['score'] for r in self.final_ranking[:10]]
         
         # Chart 1: Overall Scores
-        self.ax1.bar(players, scores, color='#3498db')
-        self.ax1.set_title('Player Scores')
-        self.ax1.set_ylabel('Score')
+        self.ax1.bar(range(len(top_players)), scores, color='#3498db')
+        self.ax1.set_title('Player Scores (Top 10)', fontsize=12, fontweight='bold')
+        self.ax1.set_ylabel('Score', fontsize=10)
+        self.ax1.set_xticks(range(len(top_players)))
+        self.ax1.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
+        self.ax1.grid(axis='y', alpha=0.3)
         
-        # Chart 2: Success Rates (Overall)
-        success_rates = [self.player_stats[p].get('all_success_rate', self.player_stats[p]['success_rate']) for p in players]
-        self.ax2.bar(players, success_rates, color='#2ecc71')
-        self.ax2.set_title('Success Rates (Overall)')
-        self.ax2.set_ylabel('Success Rate')
+        # Chart 2: Success Rates
+        success_rates = [self.player_stats[p].get('all_success_rate', self.player_stats[p]['success_rate']) for p in top_players]
+        self.ax2.bar(range(len(top_players)), success_rates, color='#2ecc71')
+        self.ax2.set_title('Success Rates (Top 10)', fontsize=12, fontweight='bold')
+        self.ax2.set_ylabel('Success Rate (%)', fontsize=10)
+        self.ax2.set_xticks(range(len(top_players)))
+        self.ax2.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
+        self.ax2.grid(axis='y', alpha=0.3)
         
-        # Chart 3: Average Penetration (Overall)
-        penetrations = [self.player_stats[p].get('all_avg_penetration', self.player_stats[p]['avg_penetration']) for p in players]
-        self.ax3.bar(players, penetrations, color='#e74c3c')
-        self.ax3.set_title('Average Penetration (Overall)')
-        self.ax3.set_ylabel('Penetration (m)')
+        # Chart 3: Average Penetration
+        penetrations = [self.player_stats[p].get('all_avg_penetration', self.player_stats[p]['avg_penetration']) for p in top_players]
+        self.ax3.bar(range(len(top_players)), penetrations, color='#e74c3c')
+        self.ax3.set_title('Avg Penetration (Top 10)', fontsize=12, fontweight='bold')
+        self.ax3.set_ylabel('Penetration (m)', fontsize=10)
+        self.ax3.set_xticks(range(len(top_players)))
+        self.ax3.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
+        self.ax3.grid(axis='y', alpha=0.3)
         
         # Chart 4: Total Points
-        total_points = [sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == p) for p in players]
-        self.ax4.bar(players, total_points, color='#f39c12')
-        self.ax4.set_title('Total Points')
-        self.ax4.set_ylabel('Points')
+        total_points = [sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == p) for p in top_players]
+        self.ax4.bar(range(len(top_players)), total_points, color='#f39c12')
+        self.ax4.set_title('Total Points (Top 10)', fontsize=12, fontweight='bold')
+        self.ax4.set_ylabel('Points', fontsize=10)
+        self.ax4.set_xticks(range(len(top_players)))
+        self.ax4.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
+        self.ax4.grid(axis='y', alpha=0.3)
         
-        plt.tight_layout()
+        self.fig.tight_layout(pad=2.5)
         self.canvas.draw()
         
     def view_live_process(self):

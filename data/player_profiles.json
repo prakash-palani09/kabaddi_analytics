@@ -1,1 +1,20 @@
-{}
+{
+  "test_p0": {
+    "player_id": "test_p0",
+    "name": "Player test_p0",
+    "team": "Unknown Team",
+    "stats": {}
+  },
+  "test_p2": {
+    "player_id": "test_p2",
+    "name": "Player test_p2",
+    "team": "Unknown Team",
+    "stats": {}
+  },
+  "TeamC_P5": {
+    "player_id": "TeamC_P5",
+    "name": "Player TeamC_P5",
+    "team": "team z",
+    "stats": {}
+  }
+}

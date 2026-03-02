@@ -41,7 +41,25 @@ class SimplifiedCourtDynamics:
         
         self.mid_center = mid_center
         
-        print(f"✓ Depth direction calculated: {self.depth_magnitude:.1f} pixels = {self.END_DISTANCE}m")
+        print(f"✓ Court setup:")
+        print(f"  Midline center: {mid_center}")
+        print(f"  End line center: {end_center}")
+        print(f"  Distance (pixels): {self.depth_magnitude:.1f}px = {self.END_DISTANCE}m")
+        print(f"  Ratio: 1 pixel = {self.END_DISTANCE/self.depth_magnitude:.4f}m")
+        
+        # Calculate actual line depths
+        baulk_center = (self.baulk_line[0] + self.baulk_line[1]) / 2
+        baulk_vector = baulk_center - mid_center
+        baulk_projection = np.dot(baulk_vector, self.depth_direction)
+        baulk_depth = (baulk_projection / self.depth_magnitude) * self.END_DISTANCE
+        
+        bonus_center = (self.bonus_line[0] + self.bonus_line[1]) / 2
+        bonus_vector = bonus_center - mid_center
+        bonus_projection = np.dot(bonus_vector, self.depth_direction)
+        bonus_depth = (bonus_projection / self.depth_magnitude) * self.END_DISTANCE
+        
+        print(f"  Baulk line at: {baulk_depth:.2f}m (marked as 3.75m)")
+        print(f"  Bonus line at: {bonus_depth:.2f}m (marked as 4.75m)")
     
     @classmethod
     def load_from_config(cls, video_path):
@@ -106,28 +124,77 @@ class SimplifiedCourtDynamics:
         return inside
     
     def get_penetration_depth(self, point):
-        """Calculate penetration in METERS using parallel line projection"""
+        """Calculate penetration in METERS using perpendicular distance to midline
+        
+        Uses true perpendicular distance formula:
+        distance = |Ax + By + C| / sqrt(A² + B²)
+        """
         x, y = point[:2] if len(point) > 2 else point
         
-        # Vector from midline center to point
-        point_vector = np.array([float(x), float(y)]) - self.mid_center
+        # Midline coefficients: Ax + By + C = 0
+        x1, y1 = float(self.midline[0][0]), float(self.midline[0][1])
+        x2, y2 = float(self.midline[1][0]), float(self.midline[1][1])
         
-        # Project onto depth direction
-        projection = float(np.dot(point_vector, self.depth_direction))
+        A = y2 - y1
+        B = x1 - x2
+        C = x2 * y1 - x1 * y2
         
-        # Convert pixels to meters with higher precision
-        # projection is in pixels, depth_magnitude is pixels for END_DISTANCE meters
-        meters = (projection / float(self.depth_magnitude)) * self.END_DISTANCE
+        # Perpendicular distance from point to midline
+        denominator = np.sqrt(A * A + B * B)
+        if denominator == 0:
+            return 0.0
+        
+        pixel_distance = abs(A * float(x) + B * float(y) + C) / denominator
+        
+        # Total perpendicular distance from midline to endline
+        # Use endline center point
+        ex, ey = float(self.end_line[0][0]), float(self.end_line[0][1])
+        total_pixel_depth = abs(A * ex + B * ey + C) / denominator
+        
+        if total_pixel_depth == 0:
+            return 0.0
+        
+        # Convert to meters
+        meters = (pixel_distance / total_pixel_depth) * self.END_DISTANCE
         
         return float(max(0.0, meters))
     
     def crossed_baulk_line(self, point):
-        """Check if penetration >= 3.75m"""
-        return self.get_penetration_depth(point) >= self.BAULK_DISTANCE
+        """Check if point crossed the physical baulk line (treat as parallel)"""
+        penetration = self.get_penetration_depth(point)
+        # Get baulk line position in depth direction
+        baulk_center = (self.baulk_line[0] + self.baulk_line[1]) / 2
+        baulk_vector = baulk_center - self.mid_center
+        baulk_projection = float(np.dot(baulk_vector, self.depth_direction))
+        baulk_depth = (baulk_projection / float(self.depth_magnitude)) * self.END_DISTANCE
+        
+        # If raider penetration >= baulk line depth, they crossed it
+        return penetration >= baulk_depth
     
     def crossed_bonus_line(self, point):
-        """Check if penetration >= 4.75m"""
-        return self.get_penetration_depth(point) >= self.BONUS_DISTANCE
+        """Check if point crossed the physical bonus line (treat as parallel)"""
+        penetration = self.get_penetration_depth(point)
+        # Get bonus line position in depth direction
+        bonus_center = (self.bonus_line[0] + self.bonus_line[1]) / 2
+        bonus_vector = bonus_center - self.mid_center
+        bonus_projection = float(np.dot(bonus_vector, self.depth_direction))
+        bonus_depth = (bonus_projection / float(self.depth_magnitude)) * self.END_DISTANCE
+        
+        # If raider penetration >= bonus line depth, they crossed it
+        return penetration >= bonus_depth
+    
+    def get_line_depth(self, line_name):
+        """Get the actual depth of a marked line in meters"""
+        if line_name == 'baulk':
+            line_center = (self.baulk_line[0] + self.baulk_line[1]) / 2
+        elif line_name == 'bonus':
+            line_center = (self.bonus_line[0] + self.bonus_line[1]) / 2
+        else:
+            return 0.0
+        
+        line_vector = line_center - self.mid_center
+        line_projection = float(np.dot(line_vector, self.depth_direction))
+        return (line_projection / float(self.depth_magnitude)) * self.END_DISTANCE
     
     def analyze_raid_path(self, positions):
         """Analyze raid path"""
