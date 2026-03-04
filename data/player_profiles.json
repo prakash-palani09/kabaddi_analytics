@@ -8,13 +8,37 @@
   "test_p2": {
     "player_id": "test_p2",
     "name": "Player test_p2",
-    "team": "Unknown Team",
+    "team": "test_team",
     "stats": {}
   },
   "TeamC_P5": {
     "player_id": "TeamC_P5",
     "name": "Player TeamC_P5",
     "team": "team z",
+    "stats": {}
+  },
+  "P7": {
+    "player_id": "P7",
+    "name": "Player P7",
+    "team": "test_team",
+    "stats": {}
+  },
+  "TeamB_P2": {
+    "player_id": "TeamB_P2",
+    "name": "Player TeamB_P2",
+    "team": "Unknown Team",
+    "stats": {}
+  },
+  "TeamD_P2": {
+    "player_id": "TeamD_P2",
+    "name": "Player TeamD_P2",
+    "team": "Unknown Team",
+    "stats": {}
+  },
+  "TeamC_P1": {
+    "player_id": "TeamC_P1",
+    "name": "Player TeamC_P1",
+    "team": "Unknown Team",
     "stats": {}
   }
 }

@@ -18,6 +18,8 @@ from analytics.profiling import build_raider_profile
 from analytics.ranking import rank_players, assign_ranks
 from analytics.player_profile import PlayerProfileManager
 from player_dashboard import PlayerDashboard
+from keyframe_viewer import open_keyframe_viewer
+from player_table import PlayerTable
 
 class KabaddiAnalyticsApp:
     def __init__(self, root):
@@ -209,6 +211,11 @@ class KabaddiAnalyticsApp:
         self.notebook.add(self.analytics_frame, text="Analytics")
         self.create_analytics_tab()
         
+        # Teams Tab
+        self.teams_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.teams_frame, text="Teams")
+        self.create_teams_tab()
+        
     def create_video_tab(self):
         # Video upload section
         upload_frame = tk.LabelFrame(self.video_frame, text="Video Upload & Processing", 
@@ -315,29 +322,17 @@ class KabaddiAnalyticsApp:
                                   font=("Arial", 12, "bold"))
         table_frame.pack(fill='both', expand=True, padx=5)
         
-        # Treeview for rankings
+        # Create player table
         columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration', 'Avg Duration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
-        self.ranking_tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=20)
-        
-        # Store sort direction for each column
-        self.sort_reverse = {col: False for col in columns}
-        
-        # Adjust column widths and add sorting
-        for col in columns:
-            self.ranking_tree.heading(col, text=col, command=lambda c=col: self.sort_table(c))
-            if col in ['Success Rate', 'Avg Penetration', 'Avg Duration', 'Avg Points']:
-                self.ranking_tree.column(col, width=100)
-            else:
-                self.ranking_tree.column(col, width=80)
-        
-        # Scrollbar
-        scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=self.ranking_tree.yview)
-        self.ranking_tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side='right', fill='y')
-        self.ranking_tree.pack(fill='both', expand=True, padx=5, pady=5)
-        
-        # Bind double-click to open player dashboard
-        self.ranking_tree.bind('<Double-Button-1>', self.open_player_dashboard)
+        self.ranking_table = PlayerTable(
+            table_frame, 
+            columns, 
+            self.profile_manager, 
+            self.player_stats, 
+            self.data, 
+            self.final_ranking,
+            self._open_dashboard
+        )
         
         # Initial display
         self.update_display()
@@ -664,6 +659,10 @@ class KabaddiAnalyticsApp:
                 self.update_rankings()
                 self.update_display()
                 
+                # Update team table if a team is selected
+                if hasattr(self, 'selected_team') and self.selected_team.get():
+                    self.show_team_players(self.selected_team.get())
+                
                 # Clear entry
                 self.delete_player_entry.delete(0, tk.END)
                 
@@ -734,35 +733,18 @@ class KabaddiAnalyticsApp:
         self.update_charts()
         
     def update_display(self):
-        # Clear existing items
-        for item in self.ranking_tree.get_children():
-            self.ranking_tree.delete(item)
+        # Update data references in tables
+        self.ranking_table.data = self.data
+        self.ranking_table.player_stats = self.player_stats
+        self.ranking_table.final_ranking = self.final_ranking
         
-        # Populate rankings table
-        for rank_data in self.final_ranking:
-            player_id = rank_data['player_id']
-            profile = self.player_stats[player_id]
-            
-            # Count unique matches for this player
-            player_matches = set(row['match_id'] for row in self.data if row['player_id'] == player_id)
-            
-            # Calculate total points and avg points per raid
-            total_points = sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == player_id)
-            total_raids = profile.get('all_raids', profile['raids'])
-            avg_points_per_raid = total_points / total_raids if total_raids > 0 else 0
-            
-            self.ranking_tree.insert('', 'end', values=(
-                rank_data['rank'],
-                player_id,
-                f"{rank_data['score']:.3f}",
-                f"{profile.get('all_success_rate', profile['success_rate']):.2f}",
-                f"{profile.get('all_avg_penetration', profile['avg_penetration']):.2f}",
-                f"{profile.get('all_avg_duration', profile['avg_duration']):.1f}",
-                total_points,
-                total_raids,
-                f"{avg_points_per_raid:.2f}",
-                len(player_matches)
-            ))
+        if hasattr(self, 'team_table'):
+            self.team_table.data = self.data
+            self.team_table.player_stats = self.player_stats
+            self.team_table.final_ranking = self.final_ranking
+        
+        # Repopulate ranking table
+        self.ranking_table.populate()
         
         # Update charts
         self.update_charts()
@@ -819,192 +801,76 @@ class KabaddiAnalyticsApp:
         self.canvas.draw()
         
     def view_live_process(self):
-        """Open a window to view key frames from raid processing"""
-        keyframes_dir = os.path.join("data", "keyframes")
-        if not os.path.exists(keyframes_dir):
-            messagebox.showinfo("Info", "No key frames found. Please run video processing first.")
-            return
-            
-        # Create new window for live view
-        live_window = tk.Toplevel(self.root)
-        live_window.title("Raid Key Frames Viewer")
-        live_window.geometry("900x700")
-        
-        # Title
-        tk.Label(live_window, text="Raid Key Frames", font=("Arial", 16, "bold")).pack(pady=10)
-        tk.Label(live_window, text="Start → Bonus → Baulk → End", font=("Arial", 10)).pack()
-        
-        # Frame display
-        frame_label = tk.Label(live_window)
-        frame_label.pack(pady=10)
-        
-        # Controls
-        control_frame = tk.Frame(live_window)
-        control_frame.pack(pady=10)
-        
-        # Get available frames
-        frame_files = [f for f in os.listdir(keyframes_dir) if f.endswith('.jpg')]
-        frame_files.sort(key=lambda x: (int(x.split('_')[1]), x.split('_')[2], int(x.split('_')[-1].split('.')[0])))
-        
-        if not frame_files:
-            tk.Label(live_window, text="No key frames available", font=("Arial", 14)).pack(pady=50)
-            return
-            
-        current_frame = tk.IntVar(value=0)
-        
-        def update_frame():
-            if frame_files:
-                frame_path = os.path.join(keyframes_dir, frame_files[current_frame.get()])
-                if os.path.exists(frame_path):
-                    import cv2
-                    from PIL import Image, ImageTk
-                    
-                    img = cv2.imread(frame_path)
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    img = cv2.resize(img, (800, 600))
-                    
-                    photo = ImageTk.PhotoImage(Image.fromarray(img))
-                    frame_label.configure(image=photo)
-                    frame_label.image = photo
-                    
-                    # Parse filename for info
-                    fname = frame_files[current_frame.get()]
-                    parts = fname.replace('.jpg', '').split('_')
-                    raid_num = parts[1]
-                    event_type = parts[2]
-                    frame_num = parts[-1]
-                    
-                    info_text = f"Raid #{raid_num} - {event_type.upper()} - Frame {frame_num} ({current_frame.get()+1}/{len(frame_files)})"
-                    frame_info.set(info_text)
-        
-        frame_info = tk.StringVar()
-        tk.Label(control_frame, textvariable=frame_info, font=("Arial", 12)).pack(pady=5)
-        
-        # Navigation buttons
-        nav_frame = tk.Frame(control_frame)
-        nav_frame.pack(pady=5)
-        
-        def prev_frame():
-            if current_frame.get() > 0:
-                current_frame.set(current_frame.get() - 1)
-                update_frame()
-                
-        def next_frame():
-            if current_frame.get() < len(frame_files) - 1:
-                current_frame.set(current_frame.get() + 1)
-                update_frame()
-        
-        tk.Button(nav_frame, text="◀ Previous", command=prev_frame).pack(side='left', padx=5)
-        tk.Button(nav_frame, text="Next ▶", command=next_frame).pack(side='left', padx=5)
-        
-        # Frame slider
-        frame_scale = tk.Scale(control_frame, from_=0, to=len(frame_files)-1, orient='horizontal',
-                              variable=current_frame, command=lambda x: update_frame(), length=400)
-        frame_scale.pack(pady=10)
-        
-        # Auto-play controls
-        auto_frame = tk.Frame(control_frame)
-        auto_frame.pack(pady=5)
-        
-        auto_playing = tk.BooleanVar()
-        
-        def auto_play():
-            if auto_playing.get():
-                if current_frame.get() < len(frame_files) - 1:
-                    current_frame.set(current_frame.get() + 1)
-                    update_frame()
-                    live_window.after(500, auto_play)  # 500ms delay
-                else:
-                    auto_playing.set(False)
-                    play_button.config(text="▶ Play")
-        
-        def toggle_play():
-            if auto_playing.get():
-                auto_playing.set(False)
-                play_button.config(text="▶ Play")
-            else:
-                auto_playing.set(True)
-                play_button.config(text="⏸ Pause")
-                auto_play()
-        
-        play_button = tk.Button(auto_frame, text="▶ Play", command=toggle_play)
-        play_button.pack(side='left', padx=5)
-        
-        tk.Button(auto_frame, text="⏹ Reset", command=lambda: [current_frame.set(0), update_frame(), auto_playing.set(False), play_button.config(text="▶ Play")]).pack(side='left', padx=5)
-        
-        # Initial frame load
-        update_frame()
+        """Open keyframe viewer window"""
+        open_keyframe_viewer(self.root)
     
-    def sort_table(self, col):
-        """Sort table by column"""
-        # Get all items
-        items = [(self.ranking_tree.set(child, col), child) for child in self.ranking_tree.get_children('')]
-        
-        # Determine sort type and direction
-        reverse = self.sort_reverse[col]
-        
-        # Sort based on column type
-        if col in ['Rank', 'Total Points', 'Total Raids', 'Matches']:
-            # Integer columns
-            items.sort(key=lambda x: int(x[0]), reverse=reverse)
-        elif col in ['Score', 'Success Rate', 'Avg Penetration', 'Avg Duration', 'Avg Points']:
-            # Float columns
-            items.sort(key=lambda x: float(x[0]), reverse=reverse)
-        else:
-            # String columns
-            items.sort(key=lambda x: x[0], reverse=reverse)
-        
-        # Rearrange items in sorted order
-        for index, (val, child) in enumerate(items):
-            self.ranking_tree.move(child, '', index)
-        
-        # Toggle sort direction for next click
-        self.sort_reverse[col] = not reverse
-        
-        # Update column header to show sort direction
-        direction = " ▼" if reverse else " ▲"
-        for column in self.ranking_tree['columns']:
-            if column == col:
-                self.ranking_tree.heading(column, text=column + direction)
-            else:
-                self.ranking_tree.heading(column, text=column)
+    def _open_dashboard(self, player_id, profile, stats):
+        """Open player dashboard - callback for PlayerTable"""
+        PlayerDashboard(self.root, player_id, profile, stats, self.profile_manager)
     
     def log_status(self, message):
         self.status_text.insert(tk.END, f"{message}\n")
         self.status_text.see(tk.END)
         self.root.update()
     
-    def open_player_dashboard(self, event):
-        """Open player dashboard on double-click"""
-        selection = self.ranking_tree.selection()
-        if not selection:
-            return
+    def create_teams_tab(self):
+        """Create teams tab with team list and player tables"""
+        # Main container
+        main_container = tk.Frame(self.teams_frame, bg='#ecf0f1')
+        main_container.pack(fill='both', expand=True, padx=10, pady=10)
         
-        item = self.ranking_tree.item(selection[0])
-        player_id = item['values'][1]  # Player ID is in column 1
+        # Left panel - Team list
+        left_panel = tk.LabelFrame(main_container, text="Teams", font=("Arial", 14, "bold"), 
+                                   bg='#ecf0f1', padx=10, pady=10)
+        left_panel.pack(side='left', fill='y', padx=(0, 10))
         
-        # Get player profile and stats
-        profile = self.profile_manager.get_profile(player_id)
-        stats = self.player_stats.get(player_id, {})
+        # Get unique teams from player IDs
+        teams = set()
+        for player_id in set(row['player_id'] for row in self.data):
+            if '_' in player_id:
+                team = player_id.split('_')[0]
+                teams.add(team)
         
-        # Add additional stats
-        player_matches = set(row['match_id'] for row in self.data if row['player_id'] == player_id)
-        total_points = sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == player_id)
-        total_raids = stats.get('all_raids', stats.get('raids', 0))
-        avg_points_per_raid = total_points / total_raids if total_raids > 0 else 0
+        self.selected_team = tk.StringVar()
         
-        stats['total_points'] = total_points
-        stats['avg_points_per_raid'] = avg_points_per_raid
-        stats['total_matches'] = len(player_matches)
+        # Team buttons
+        for team in sorted(teams):
+            btn = tk.Button(left_panel, text=team, font=("Arial", 12), 
+                          bg='#3498db', fg='white', width=15, pady=10,
+                          command=lambda t=team: self.show_team_players(t))
+            btn.pack(pady=5)
         
-        # Find player's rank score
-        for rank_data in self.final_ranking:
-            if rank_data['player_id'] == player_id:
-                stats['score'] = rank_data['score']
-                break
+        # Right panel - Player table
+        right_panel = tk.Frame(main_container, bg='#ecf0f1')
+        right_panel.pack(side='left', fill='both', expand=True)
         
-        # Open dashboard
-        PlayerDashboard(self.root, player_id, profile, stats, self.profile_manager)
+        # Team name label
+        self.team_name_label = tk.Label(right_panel, text="Select a team", 
+                                       font=("Arial", 16, "bold"), bg='#ecf0f1')
+        self.team_name_label.pack(pady=10)
+        
+        # Player table
+        table_frame = tk.Frame(right_panel)
+        table_frame.pack(fill='both', expand=True)
+        
+        columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
+        self.team_table = PlayerTable(
+            table_frame,
+            columns,
+            self.profile_manager,
+            self.player_stats,
+            self.data,
+            self.final_ranking,
+            self._open_dashboard
+        )
+    
+    def show_team_players(self, team_name):
+        """Display players for selected team"""
+        self.selected_team.set(team_name)
+        self.team_name_label.config(text=f"{team_name} Players")
+        
+        # Populate table with team filter
+        self.team_table.populate(player_filter=lambda pid: pid.startswith(team_name + '_'))
 
 if __name__ == "__main__":
     root = tk.Tk()

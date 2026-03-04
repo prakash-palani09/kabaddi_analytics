@@ -53,11 +53,6 @@ if __name__ == "__main__":
     cv2.namedWindow("Setup Play Area", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Setup Play Area", mouse_callback)
     
-    play_box = []
-    midline = []
-    baulk_line = []
-    bonus_line = []
-    
     while True:
         display = frame.copy()
         
