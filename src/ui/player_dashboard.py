@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.patches import Circle, RegularPolygon
+from matplotlib.patches import Circle
 from matplotlib.path import Path
 from matplotlib.projections.polar import PolarAxes
 from matplotlib.projections import register_projection
@@ -15,46 +15,59 @@ from matplotlib.spines import Spine
 from matplotlib.transforms import Affine2D
 import numpy as np
 
+from theme import (
+    apply_theme, flat_btn, card, divider,
+    entry as make_entry, figure_bg,
+    BG, CARD, BORDER, PRIMARY, SUCCESS, ACCENT, DANGER,
+    TEXT, TEXT2, TEXT3, WHITE,
+    F_H1, F_H2, F_H3, F_BODY, F_SMALL, F_LABEL, F_STAT,
+    C_BLUE, C_GREEN, C_ORANGE, C_RED, C_GRID,
+    PAD_SM, PAD_MD, PAD_LG, PAD_XL,
+)
+
+# ── Stat card accent colours (cycles through meaningful palette) ───────────
+_STAT_COLORS = [PRIMARY, SUCCESS, ACCENT, C_RED, PRIMARY, SUCCESS, ACCENT, C_RED]
+
 
 def radar_factory(num_vars, frame='circle'):
-    """Create a radar chart with `num_vars` axes."""
+    """Create a radar chart projection with `num_vars` axes."""
     theta = np.linspace(0, 2 * np.pi, num_vars, endpoint=False)
-    
+
     class RadarAxes(PolarAxes):
         name = 'radar'
-        
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.set_theta_zero_location('N')
-        
+
         def fill(self, *args, closed=True, **kwargs):
             return super().fill(closed=closed, *args, **kwargs)
-        
+
         def plot(self, *args, **kwargs):
             lines = super().plot(*args, **kwargs)
             for line in lines:
                 self._close_line(line)
-        
+
         def _close_line(self, line):
             x, y = line.get_data()
             if x[0] != x[-1]:
                 x = np.concatenate((x, [x[0]]))
                 y = np.concatenate((y, [y[0]]))
                 line.set_data(x, y)
-        
+
         def set_varlabels(self, labels):
             self.set_thetagrids(np.degrees(theta), labels)
-        
+
         def _gen_axes_patch(self):
             return Circle((0.5, 0.5), 0.5)
-        
+
         def _gen_axes_spines(self):
             spine = Spine(axes=self, spine_type='circle',
-                         path=Path.unit_circle())
-            spine.set_transform(Affine2D().scale(.5).translate(.5, .5)
-                              + self.transAxes)
+                          path=Path.unit_circle())
+            spine.set_transform(
+                Affine2D().scale(.5).translate(.5, .5) + self.transAxes)
             return {'polar': spine}
-    
+
     register_projection(RadarAxes)
     return theta
 
@@ -62,195 +75,349 @@ def radar_factory(num_vars, frame='circle'):
 class PlayerDashboard:
     def __init__(self, parent, player_id, profile, stats, profile_manager):
         self.window = tk.Toplevel(parent)
-        self.window.title(f"Player Dashboard - {player_id}")
-        self.window.geometry("1000x700")
-        self.window.configure(bg='#ecf0f1')
-        
-        self.player_id = player_id
-        self.profile = profile
-        self.stats = stats
+        self.window.title(f"Player Dashboard — {player_id}")
+        self.window.geometry("1100x740")
+        self.window.configure(bg=BG)
+
+        self.player_id    = player_id
+        self.profile      = profile
+        self.stats        = stats
         self.profile_manager = profile_manager
-        
+
         self.create_dashboard()
-    
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  MAIN LAYOUT
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_dashboard(self):
-        # Header
-        header_frame = tk.Frame(self.window, bg='#2c3e50', height=80)
-        header_frame.pack(fill='x')
-        header_frame.pack_propagate(False)
-        
-        tk.Label(header_frame, text=f"Player ID: {self.player_id}", 
-                font=("Arial", 18, "bold"), fg='white', bg='#2c3e50').pack(side='left', padx=20, pady=10)
-        
-        # Edit button
-        tk.Button(header_frame, text="Edit Profile", command=self.edit_profile,
-                 bg='#3498db', fg='white', font=("Arial", 10)).pack(side='right', padx=20)
-        
-        # Main content
-        content_frame = tk.Frame(self.window, bg='#ecf0f1')
-        content_frame.pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # Left side - Profile info
-        left_frame = tk.LabelFrame(content_frame, text="Profile Information", 
-                                   font=("Arial", 12, "bold"), bg='#ecf0f1', padx=10, pady=10)
-        left_frame.pack(side='left', fill='both', expand=True, padx=5)
-        
-        # Profile details
-        tk.Label(left_frame, text="Name:", font=("Arial", 11, "bold"), bg='#ecf0f1').grid(row=0, column=0, sticky='w', pady=5)
-        tk.Label(left_frame, text=self.profile.name, font=("Arial", 11), bg='#ecf0f1').grid(row=0, column=1, sticky='w', padx=10)
-        
-        tk.Label(left_frame, text="Team:", font=("Arial", 11, "bold"), bg='#ecf0f1').grid(row=1, column=0, sticky='w', pady=5)
-        tk.Label(left_frame, text=self.profile.team, font=("Arial", 11), bg='#ecf0f1').grid(row=1, column=1, sticky='w', padx=10)
-        
-        # Statistics
-        stats_frame = tk.LabelFrame(left_frame, text="Statistics", font=("Arial", 11, "bold"), bg='#ecf0f1')
-        stats_frame.grid(row=2, column=0, columnspan=2, sticky='ew', pady=10)
-        
+        # ── Top header bar ────────────────────────────────────────────────
+        header = tk.Frame(self.window, bg=PRIMARY)
+        header.pack(fill='x')
+
+        hdr_inner = tk.Frame(header, bg=PRIMARY)
+        hdr_inner.pack(fill='x', padx=PAD_XL, pady=PAD_MD)
+
+        # Left: player identity
+        id_col = tk.Frame(hdr_inner, bg=PRIMARY)
+        id_col.pack(side='left', fill='y')
+
+        tk.Label(id_col,
+                 text=self.player_id,
+                 font=F_H1, fg=WHITE, bg=PRIMARY).pack(anchor='w')
+        tk.Label(id_col,
+                 text=f"{self.profile.name}  ·  {self.profile.team}",
+                 font=F_BODY, fg='#bfdbfe', bg=PRIMARY).pack(anchor='w', pady=(2, 0))
+
+        # Right: action button
+        flat_btn(hdr_inner, "✎  Edit Profile",
+                 command=self.edit_profile,
+                 color=WHITE,
+                 hover='#e2e8f0').pack(
+            side='right',
+            padx=(PAD_MD, 0))
+        # Override fg for this button (white bg needs dark text)
+        for widget in hdr_inner.winfo_children():
+            if isinstance(widget, tk.Button):
+                widget.config(fg=PRIMARY, activeforeground=PRIMARY)
+
+        # Blue underline accent
+        tk.Frame(header, bg=SUCCESS, height=3).pack(fill='x')
+
+        # ── Body (two columns) ────────────────────────────────────────────
+        body = tk.Frame(self.window, bg=BG)
+        body.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
+
+        # Left column
+        left = tk.Frame(body, bg=BG)
+        left.pack(side='left', fill='both', expand=False,
+                  padx=(0, PAD_MD))
+        left.config(width=360)
+        left.pack_propagate(False)
+
+        # Right column
+        right = tk.Frame(body, bg=BG)
+        right.pack(side='left', fill='both', expand=True)
+
+        self._build_left_panel(left)
+        self._build_right_panel(right)
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  LEFT PANEL  — Profile + Stats
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _build_left_panel(self, parent):
+        # ── Profile info card ──────────────────────────────────────────────
+        info_card = card(parent, padx=PAD_LG, pady=PAD_MD)
+        info_card.pack(fill='x', pady=(0, PAD_MD))
+
+        _card_title(info_card, "Profile")
+
+        grid = tk.Frame(info_card, bg=CARD)
+        grid.pack(fill='x')
+        grid.columnconfigure(1, weight=1)
+
+        def _row(label, value, row_num):
+            tk.Label(grid, text=label,
+                     font=F_LABEL, fg=TEXT2, bg=CARD).grid(
+                row=row_num, column=0, sticky='w', pady=5)
+            tk.Label(grid, text=value,
+                     font=('Segoe UI', 10, 'bold'), fg=TEXT, bg=CARD).grid(
+                row=row_num, column=1, sticky='w', padx=(PAD_MD, 0), pady=5)
+
+        _row("Player ID", self.player_id,   0)
+        _row("Name",      self.profile.name, 1)
+        _row("Team",      self.profile.team, 2)
+
+        # ── KPI stat tiles ────────────────────────────────────────────────
+        stats_card = card(parent, padx=PAD_MD, pady=PAD_MD)
+        stats_card.pack(fill='both', expand=True)
+
+        _card_title(stats_card, "Statistics")
+
         stats_data = [
-            ("Total Raids", self.stats.get('all_raids', 0)),
-            ("Success Rate", f"{self.stats.get('all_success_rate', 0):.1f}%"),
-            ("Avg Penetration", f"{self.stats.get('all_avg_penetration', 0):.2f} m"),
-            ("Avg Duration", f"{self.stats.get('all_avg_duration', 0):.1f} sec"),
-            ("Total Points", self.stats.get('total_points', 0)),
-            ("Avg Points/Raid", f"{self.stats.get('avg_points_per_raid', 0):.2f}"),
-            ("Total Matches", self.stats.get('total_matches', 0)),
-            ("Rank Score", f"{self.stats.get('score', 0):.3f}")
+            ("Total Raids",      self.stats.get('all_raids', 0)),
+            ("Success Rate",     f"{self.stats.get('all_success_rate', 0):.1f}%"),
+            ("Avg Penetration",  f"{self.stats.get('all_avg_penetration', 0):.2f} m"),
+            ("Avg Duration",     f"{self.stats.get('all_avg_duration', 0):.1f} sec"),
+            ("Total Points",     self.stats.get('total_points', 0)),
+            ("Avg Points/Raid",  f"{self.stats.get('avg_points_per_raid', 0):.2f}"),
+            ("Total Matches",    self.stats.get('total_matches', 0)),
+            ("Rank Score",       f"{self.stats.get('score', 0):.3f}"),
         ]
-        
+
+        # 2-column tile grid
+        tile_grid = tk.Frame(stats_card, bg=CARD)
+        tile_grid.pack(fill='both', expand=True)
+        tile_grid.columnconfigure(0, weight=1)
+        tile_grid.columnconfigure(1, weight=1)
+
         for i, (label, value) in enumerate(stats_data):
-            tk.Label(stats_frame, text=f"{label}:", font=("Arial", 10), bg='#ecf0f1').grid(row=i, column=0, sticky='w', padx=5, pady=3)
-            tk.Label(stats_frame, text=str(value), font=("Arial", 10, "bold"), bg='#ecf0f1').grid(row=i, column=1, sticky='e', padx=5, pady=3)
-        
-        # Right side - Spider chart
-        right_frame = tk.LabelFrame(content_frame, text="Performance Radar", 
-                                    font=("Arial", 12, "bold"), bg='#ecf0f1')
-        right_frame.pack(side='right', fill='both', expand=True, padx=5)
-        
-        self.create_spider_chart(right_frame)
-    
+            col_idx = i % 2
+            row_idx = i // 2
+
+            tile = tk.Frame(tile_grid, bg=BG,
+                            highlightbackground=BORDER,
+                            highlightthickness=1)
+            tile.grid(row=row_idx, column=col_idx,
+                      sticky='nsew', padx=3, pady=3)
+            tile_grid.rowconfigure(row_idx, weight=1)
+
+            color = _STAT_COLORS[i]
+            tk.Frame(tile, bg=color, height=3).pack(fill='x')
+            tk.Label(tile, text=str(value),
+                     font=('Segoe UI', 13, 'bold'),
+                     fg=color, bg=BG).pack(anchor='w',
+                                           padx=PAD_SM, pady=(PAD_SM, 0))
+            tk.Label(tile, text=label,
+                     font=F_LABEL, fg=TEXT2, bg=BG).pack(
+                anchor='w', padx=PAD_SM, pady=(0, PAD_SM))
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  RIGHT PANEL  — Radar chart
+    # ──────────────────────────────────────────────────────────────────────
+
+    def _build_right_panel(self, parent):
+        radar_card = card(parent, padx=0, pady=0)
+        radar_card.pack(fill='both', expand=True)
+
+        _card_title(radar_card, "Performance Radar", padx=PAD_MD)
+
+        self.create_spider_chart(radar_card)
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  SPIDER CHART  (logic unchanged, styling upgraded)
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_spider_chart(self, parent):
         """Create pentagon-shaped radar chart with quality-based metrics"""
         categories = ['Efficiency', 'Aggression', 'Impact', 'Control', 'Consistency']
-        
-        # Elite performance thresholds
-        ELITE_PENETRATION = 5.0  # meters
+
+        ELITE_PENETRATION    = 5.0
         ELITE_POINTS_PER_RAID = 3.0
         ELITE_RAIDS_PER_MATCH = 15
-        
-        # 1. Efficiency → Success Rate (%)
+
         efficiency = min(self.stats.get('all_success_rate', 0), 100)
-        
-        # 2. Aggression → Avg Max Penetration
-        aggression = min((self.stats.get('all_avg_penetration', 0) / ELITE_PENETRATION) * 100, 100)
-        
-        # 3. Impact → Avg Points per Raid
-        impact = min((self.stats.get('avg_points_per_raid', 0) / ELITE_POINTS_PER_RAID) * 100, 100)
-        
-        # 4. Control → Successful raids in optimal duration (5-20 sec)
+
+        aggression = min(
+            (self.stats.get('all_avg_penetration', 0) / ELITE_PENETRATION) * 100, 100)
+
+        impact = min(
+            (self.stats.get('avg_points_per_raid', 0) / ELITE_POINTS_PER_RAID) * 100, 100)
+
         success_rate = self.stats.get('all_success_rate', 0)
         avg_duration = self.stats.get('all_avg_duration', 0)
-        
         if 5 <= avg_duration <= 20:
             duration_score = 100
         elif avg_duration < 5:
             duration_score = (avg_duration / 5) * 100
         else:
             duration_score = max(100 - ((avg_duration - 20) / 5) * 100, 0)
-        
-        control = (success_rate / 100) * duration_score
-        control = min(max(control, 0), 100)
-        
-        # 5. Consistency → Raid Activity (raids per match)
-        total_raids = self.stats.get('all_raids', 0)
+        control = min(max((success_rate / 100) * duration_score, 0), 100)
+
+        total_raids   = self.stats.get('all_raids', 0)
         total_matches = self.stats.get('total_matches', 1)
         raids_per_match = total_raids / total_matches if total_matches > 0 else 0
         consistency = min((raids_per_match / ELITE_RAIDS_PER_MATCH) * 100, 100)
-        
+
         values = [efficiency, aggression, impact, control, consistency]
-        
-        # Radar geometry constants
+
         MAX_RADIUS = 100
         N = 5
         angles = np.linspace(0, 2 * np.pi, N, endpoint=False) + np.pi / 2
-        
-        # Normalize values to 0-1 range
-        normalized_values = [v / 100 for v in values]
-        
-        # Create figure
-        fig = plt.Figure(figsize=(6, 6), facecolor='#ecf0f1')
-        ax = fig.add_subplot(111)
-        
-        # Draw uniform radial grid levels
-        for level in [0.2, 0.4, 0.6, 0.8, 1.0]:
-            radius = level * MAX_RADIUS
-            x_grid = [radius * np.cos(angle) for angle in angles] + [radius * np.cos(angles[0])]
-            y_grid = [radius * np.sin(angle) for angle in angles] + [radius * np.sin(angles[0])]
-            ax.plot(x_grid, y_grid, 'k--', linewidth=0.5, alpha=0.3)
-            ax.text(0, radius, f'{int(level * 100)}%', ha='center', va='bottom', size=8, color='gray')
-        
-        # Draw axes from center to vertices
+        normalized = [v / 100 for v in values]
+
+        # ── Figure ────────────────────────────────────────────────────────
+        fig = plt.Figure(figsize=(6.2, 6.2), facecolor=CARD)
+        ax  = fig.add_subplot(111)
+        ax.set_facecolor(CARD)
+
+        # Grid rings
+        grid_levels  = [0.2, 0.4, 0.6, 0.8, 1.0]
+        grid_colours = ['#e2e8f0', '#e2e8f0', '#cbd5e1', '#cbd5e1', '#94a3b8']
+
+        for level, gc in zip(grid_levels, grid_colours):
+            r = level * MAX_RADIUS
+            xs = [r * np.cos(a) for a in angles] + [r * np.cos(angles[0])]
+            ys = [r * np.sin(a) for a in angles] + [r * np.sin(angles[0])]
+            ax.plot(xs, ys, color=gc, linewidth=0.8, zorder=1)
+            ax.text(1, r + 2, f'{int(level * 100)}',
+                    ha='left', va='bottom', size=7.5,
+                    color=TEXT3, zorder=2)
+
+        # Spoke lines
         for angle in angles:
-            ax.plot([0, MAX_RADIUS * np.cos(angle)], [0, MAX_RADIUS * np.sin(angle)], 'k-', linewidth=0.5, alpha=0.3)
-        
-        # Plot data pentagon
-        x_data = [normalized_values[i] * MAX_RADIUS * np.cos(angles[i]) for i in range(N)] + [normalized_values[0] * MAX_RADIUS * np.cos(angles[0])]
-        y_data = [normalized_values[i] * MAX_RADIUS * np.sin(angles[i]) for i in range(N)] + [normalized_values[0] * MAX_RADIUS * np.sin(angles[0])]
-        
-        ax.plot(x_data, y_data, 'o-', linewidth=3, color='#e74c3c', markersize=10)
-        ax.fill(x_data, y_data, alpha=0.35, color='#e74c3c')
-        
-        # Add category labels
-        label_distance = MAX_RADIUS * 1.15
-        for i, (angle, category) in enumerate(zip(angles, categories)):
-            x = label_distance * np.cos(angle)
-            y = label_distance * np.sin(angle)
-            ax.text(x, y, category, ha='center', va='center', size=11, weight='bold')
-        
-        # Configure axes
-        ax.set_xlim(-MAX_RADIUS * 1.3, MAX_RADIUS * 1.3)
-        ax.set_ylim(-MAX_RADIUS * 1.3, MAX_RADIUS * 1.3)
+            ax.plot([0, MAX_RADIUS * np.cos(angle)],
+                    [0, MAX_RADIUS * np.sin(angle)],
+                    color=BORDER, linewidth=0.8, zorder=1)
+
+        # Data polygon — primary colour fill
+        x_data = [normalized[i] * MAX_RADIUS * np.cos(angles[i]) for i in range(N)] \
+                 + [normalized[0] * MAX_RADIUS * np.cos(angles[0])]
+        y_data = [normalized[i] * MAX_RADIUS * np.sin(angles[i]) for i in range(N)] \
+                 + [normalized[0] * MAX_RADIUS * np.sin(angles[0])]
+
+        ax.fill(x_data, y_data, alpha=0.20, color=PRIMARY, zorder=3)
+        ax.plot(x_data, y_data,
+                color=PRIMARY, linewidth=2.5, zorder=4)
+
+        # Data point markers
+        for i in range(N):
+            px = normalized[i] * MAX_RADIUS * np.cos(angles[i])
+            py = normalized[i] * MAX_RADIUS * np.sin(angles[i])
+            ax.scatter(px, py,
+                       s=60, color=PRIMARY,
+                       zorder=5, edgecolors=WHITE, linewidths=1.5)
+
+        # Category labels
+        label_r = MAX_RADIUS * 1.22
+        for i, (angle, cat) in enumerate(zip(angles, categories)):
+            x = label_r * np.cos(angle)
+            y = label_r * np.sin(angle)
+            # Colour label by performance tier
+            pct = values[i]
+            if pct >= 70:
+                lc = SUCCESS
+            elif pct >= 40:
+                lc = ACCENT
+            else:
+                lc = TEXT2
+            ax.text(x, y, cat,
+                    ha='center', va='center',
+                    size=11, weight='bold', color=lc, zorder=6)
+
+            # Small percentage underneath
+            ax.text(x, y - MAX_RADIUS * 0.13,
+                    f"{values[i]:.0f}%",
+                    ha='center', va='center',
+                    size=8.5, color=TEXT2, zorder=6)
+
+        ax.set_xlim(-MAX_RADIUS * 1.4, MAX_RADIUS * 1.4)
+        ax.set_ylim(-MAX_RADIUS * 1.4, MAX_RADIUS * 1.4)
         ax.set_aspect('equal')
         ax.axis('off')
-        
-        # Embed in tkinter
+        fig.tight_layout(pad=1.5)
+
         canvas = FigureCanvasTkAgg(fig, parent)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
-    
+        canvas.get_tk_widget().pack(fill='both', expand=True,
+                                     padx=PAD_MD, pady=PAD_MD)
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  EDIT PROFILE DIALOG
+    # ──────────────────────────────────────────────────────────────────────
+
     def edit_profile(self):
         """Open dialog to edit player profile"""
-        edit_window = tk.Toplevel(self.window)
-        edit_window.title(f"Edit Profile - {self.player_id}")
-        edit_window.geometry("400x200")
-        edit_window.configure(bg='#ecf0f1')
-        
-        tk.Label(edit_window, text="Name:", font=("Arial", 11), bg='#ecf0f1').grid(row=0, column=0, padx=10, pady=10, sticky='w')
-        name_entry = tk.Entry(edit_window, font=("Arial", 11), width=25)
+        dlg = tk.Toplevel(self.window)
+        dlg.title(f"Edit Profile — {self.player_id}")
+        dlg.geometry("440x280")
+        dlg.configure(bg=BG)
+        dlg.resizable(False, False)
+
+        # Header strip
+        hdr = tk.Frame(dlg, bg=PRIMARY)
+        hdr.pack(fill='x')
+        tk.Label(hdr, text="Edit Player Profile",
+                 font=F_H3, fg=WHITE, bg=PRIMARY).pack(
+            padx=PAD_LG, pady=PAD_MD, anchor='w')
+        tk.Frame(hdr, bg=SUCCESS, height=2).pack(fill='x')
+
+        # Form card
+        form = card(dlg, padx=PAD_XL, pady=PAD_LG)
+        form.pack(fill='both', expand=True,
+                  padx=PAD_LG, pady=PAD_LG)
+
+        form.columnconfigure(1, weight=1)
+
+        tk.Label(form, text="Name",
+                 font=F_LABEL, fg=TEXT2, bg=CARD).grid(
+            row=0, column=0, sticky='w', pady=8)
+        name_entry = make_entry(form, width=26)
         name_entry.insert(0, self.profile.name)
-        name_entry.grid(row=0, column=1, padx=10, pady=10)
-        
-        tk.Label(edit_window, text="Team:", font=("Arial", 11), bg='#ecf0f1').grid(row=1, column=0, padx=10, pady=10, sticky='w')
-        team_entry = tk.Entry(edit_window, font=("Arial", 11), width=25)
+        name_entry.grid(row=0, column=1, sticky='ew', pady=8, padx=(PAD_MD, 0))
+
+        tk.Label(form, text="Team",
+                 font=F_LABEL, fg=TEXT2, bg=CARD).grid(
+            row=1, column=0, sticky='w', pady=8)
+        team_entry = make_entry(form, width=26)
         team_entry.insert(0, self.profile.team)
-        team_entry.grid(row=1, column=1, padx=10, pady=10)
-        
+        team_entry.grid(row=1, column=1, sticky='ew', pady=8, padx=(PAD_MD, 0))
+
+        divider(form, bg=BORDER).grid(row=2, column=0, columnspan=2,
+                                       sticky='ew', pady=(PAD_MD, 0))
+
+        btn_row = tk.Frame(form, bg=CARD)
+        btn_row.grid(row=3, column=0, columnspan=2,
+                     sticky='e', pady=(PAD_MD, 0))
+
         def save_changes():
             new_name = name_entry.get().strip()
             new_team = team_entry.get().strip()
-            
             if not new_name:
                 messagebox.showerror("Error", "Name cannot be empty")
                 return
-            
             self.profile.name = new_name
             self.profile.team = new_team
             self.profile_manager.save_profiles()
-            
             messagebox.showinfo("Success", "Profile updated successfully")
-            edit_window.destroy()
+            dlg.destroy()
             self.window.destroy()
-        
-        tk.Button(edit_window, text="Save", command=save_changes, bg='#27ae60', fg='white', 
-                 font=("Arial", 11), width=10).grid(row=2, column=0, padx=10, pady=20)
-        tk.Button(edit_window, text="Cancel", command=edit_window.destroy, bg='#95a5a6', fg='white',
-                 font=("Arial", 11), width=10).grid(row=2, column=1, padx=10, pady=20)
+
+        flat_btn(btn_row, "Save Changes",
+                 command=save_changes,
+                 color=SUCCESS).pack(side='left', padx=(0, PAD_SM))
+        flat_btn(btn_row, "Cancel",
+                 command=dlg.destroy,
+                 color='#64748b').pack(side='left')
+
+
+# ── Shared card-title helper ───────────────────────────────────────────────
+
+def _card_title(parent, text, padx=PAD_MD):
+    row = tk.Frame(parent, bg=CARD)
+    row.pack(fill='x', padx=padx, pady=(0, PAD_SM))
+    tk.Frame(row, bg=PRIMARY, width=3, height=18).pack(
+        side='left', padx=(0, PAD_SM))
+    tk.Label(row, text=text, font=F_H3, fg=TEXT, bg=CARD).pack(side='left')
+    divider(parent, bg=BORDER).pack(fill='x', pady=(0, PAD_MD))

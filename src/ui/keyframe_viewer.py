@@ -4,186 +4,323 @@ import os
 import cv2
 from PIL import Image, ImageTk
 
+from theme import (
+    apply_theme, flat_btn, divider,
+    BG, CARD, BORDER, PRIMARY, SUCCESS, ACCENT, DANGER,
+    TEXT, TEXT2, TEXT3, WHITE,
+    F_H2, F_H3, F_BODY, F_SMALL, F_LABEL,
+    PAD_SM, PAD_MD, PAD_LG, PAD_XL,
+)
+
+# ── Event badge colours ────────────────────────────────────────────────────
+EVENT_COLORS = {
+    'start': SUCCESS,   # green  — raid begins
+    'baulk': PRIMARY,   # blue   — baulk line crossed
+    'bonus': ACCENT,    # orange — bonus line crossed
+    'end':   TEXT2,     # muted  — raid ends
+}
+
+EVENT_LABELS = {
+    'start': 'Raid Start',
+    'baulk': 'Baulk Line',
+    'bonus': 'Bonus Line',
+    'end':   'End / Return',
+}
+
+LINE_NAMES = {
+    'start': 'MIDLINE (Raid Start)',
+    'baulk': 'BAULK LINE',
+    'bonus': 'BONUS LINE',
+    'end':   'END LINE (Return to Midline)',
+}
+
+
 def open_keyframe_viewer(parent_root):
     """Open keyframe viewer window"""
-    keyframes_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "keyframes")
+    keyframes_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "data", "keyframes")
     if not os.path.exists(keyframes_dir):
         keyframes_dir = os.path.join("data", "keyframes")
-    
+
     if not os.path.exists(keyframes_dir):
-        messagebox.showinfo("Info", "No key frames found. Please run video processing first.")
+        messagebox.showinfo("Info",
+            "No key frames found. Please run video processing first.")
         return
-    
+
     frame_files = [f for f in os.listdir(keyframes_dir) if f.endswith('.jpg')]
     if not frame_files:
-        messagebox.showinfo("Info", "No key frames available. Please run video processing first.")
+        messagebox.showinfo("Info",
+            "No key frames available. Please run video processing first.")
         return
-    
-    # Organize frames by raid and event type
+
+    # ── Organise frames by raid + event type ──────────────────────────────
     raids_data = {}
     for fname in frame_files:
         parts = fname.replace('.jpg', '').split('_')
         if len(parts) >= 4:
-            raid_num = int(parts[1])
+            raid_num   = int(parts[1])
             event_type = parts[2]
-            
-            if raid_num not in raids_data:
-                raids_data[raid_num] = {'start': None, 'baulk': None, 'bonus': None, 'end': None, 'lost': None}
-            
-            if event_type in raids_data[raid_num] and raids_data[raid_num][event_type] is None:
+            raids_data.setdefault(
+                raid_num,
+                {'start': None, 'baulk': None, 'bonus': None,
+                 'end': None, 'lost': None})
+            if event_type in raids_data[raid_num] \
+                    and raids_data[raid_num][event_type] is None:
                 raids_data[raid_num][event_type] = fname
-    
+
     if not raids_data:
         messagebox.showinfo("Info", "No valid raid key frames found.")
         return
-    
-    # Create viewer window
-    live_window = tk.Toplevel(parent_root)
-    live_window.title("Raid Key Frames Viewer")
-    live_window.geometry("1000x800")
-    live_window.configure(bg='#2c3e50')
-    
-    # Title
-    tk.Label(live_window, text="Raid Key Frames Viewer", 
-            font=("Arial", 18, "bold"), fg='white', bg='#2c3e50').pack(pady=10)
-    tk.Label(live_window, text="Navigate through raid events: Start → Baulk → Bonus → End", 
-            font=("Arial", 11), fg='#ecf0f1', bg='#2c3e50').pack()
-    
-    # Current state
-    current_raid = tk.IntVar(value=min(raids_data.keys()))
-    event_sequence = ['start', 'baulk', 'bonus', 'end']
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  BUILD WINDOW
+    # ═══════════════════════════════════════════════════════════════════
+    win = tk.Toplevel(parent_root)
+    win.title("Raid Key Frames Viewer")
+    win.geometry("1080x820")
+    win.configure(bg=BG)
+
+    # ── Top header bar ────────────────────────────────────────────────
+    header = tk.Frame(win, bg=PRIMARY)
+    header.pack(fill='x')
+
+    header_inner = tk.Frame(header, bg=PRIMARY)
+    header_inner.pack(fill='x', padx=PAD_XL, pady=PAD_MD)
+
+    tk.Label(header_inner,
+             text="Raid Key Frames Viewer",
+             font=F_H2, fg=WHITE, bg=PRIMARY).pack(anchor='w')
+    tk.Label(header_inner,
+             text="Navigate through raid events: Start → Baulk → Bonus → End",
+             font=F_SMALL, fg='#bfdbfe', bg=PRIMARY).pack(anchor='w', pady=(2, 0))
+
+    # Primary accent underline
+    tk.Frame(header, bg=SUCCESS, height=3).pack(fill='x')
+
+    # ── State ─────────────────────────────────────────────────────────
+    event_sequence    = ['start', 'baulk', 'bonus', 'end']
+    current_raid      = tk.IntVar(value=min(raids_data.keys()))
     current_event_idx = tk.IntVar(value=0)
-    
-    # Info frame
-    info_frame = tk.Frame(live_window, bg='#34495e', relief='raised', bd=2)
-    info_frame.pack(fill='x', padx=20, pady=10)
-    
-    raid_info = tk.StringVar()
-    event_info = tk.StringVar()
-    
-    tk.Label(info_frame, textvariable=raid_info, font=("Arial", 14, "bold"), 
-            fg='#3498db', bg='#34495e').pack(pady=5)
-    tk.Label(info_frame, textvariable=event_info, font=("Arial", 12), 
-            fg='#2ecc71', bg='#34495e').pack(pady=5)
-    
-    # Image display frame
-    image_frame = tk.Frame(live_window, bg='#2c3e50')
-    image_frame.pack(fill='both', expand=True, padx=20, pady=10)
-    
-    frame_label = tk.Label(image_frame, bg='#34495e')
+
+    # ── Info strip ───────────────────────────────────────────────────
+    info_strip = tk.Frame(win, bg=CARD,
+                          highlightbackground=BORDER, highlightthickness=1)
+    info_strip.pack(fill='x', padx=PAD_LG, pady=(PAD_LG, 0))
+
+    info_inner = tk.Frame(info_strip, bg=CARD)
+    info_inner.pack(fill='x', padx=PAD_LG, pady=PAD_SM)
+
+    # Left: raid ID pill
+    raid_pill_frame = tk.Frame(info_inner, bg=CARD)
+    raid_pill_frame.pack(side='left')
+
+    raid_num_lbl = tk.Label(raid_pill_frame,
+                            text="Raid #–",
+                            font=('Segoe UI', 18, 'bold'),
+                            fg=PRIMARY, bg=CARD)
+    raid_num_lbl.pack(side='left')
+
+    raid_counter_lbl = tk.Label(raid_pill_frame,
+                                text="",
+                                font=F_BODY, fg=TEXT2, bg=CARD)
+    raid_counter_lbl.pack(side='left', padx=(PAD_SM, 0))
+
+    # Right: event badge
+    event_badge = tk.Label(info_inner,
+                           text="  START  ",
+                           font=('Segoe UI', 9, 'bold'),
+                           fg=WHITE, bg=SUCCESS,
+                           relief='flat', padx=4, pady=3)
+    event_badge.pack(side='right')
+
+    event_step_lbl = tk.Label(info_inner,
+                              text="Step 1 / 4",
+                              font=F_SMALL, fg=TEXT2, bg=CARD)
+    event_step_lbl.pack(side='right', padx=(0, PAD_MD))
+
+    divider(win, bg=BORDER).pack(fill='x', padx=PAD_LG)
+
+    # ── Image area ────────────────────────────────────────────────────
+    img_card = tk.Frame(win, bg='#0f172a',
+                        highlightbackground=BORDER, highlightthickness=1)
+    img_card.pack(fill='both', expand=True,
+                  padx=PAD_LG, pady=PAD_MD)
+
+    frame_label = tk.Label(img_card, bg='#0f172a')
     frame_label.pack(fill='both', expand=True)
-    
-    # Message label for "not detected"
-    message_label = tk.Label(image_frame, text="", font=("Arial", 16, "bold"), 
-                            fg='#e74c3c', bg='#34495e')
-    
+
+    # "Not detected" overlay
+    not_detected_frame = tk.Frame(img_card, bg='#0f172a')
+    alert_icon = tk.Label(not_detected_frame,
+                          text="⚠",
+                          font=('Segoe UI', 36),
+                          fg=ACCENT, bg='#0f172a')
+    not_det_title = tk.Label(not_detected_frame,
+                             text="Not Detected",
+                             font=('Segoe UI', 18, 'bold'),
+                             fg=WHITE, bg='#0f172a')
+    not_det_sub = tk.Label(not_detected_frame,
+                           text="",
+                           font=F_BODY, fg=TEXT3, bg='#0f172a')
+
+    # ── Event timeline strip ─────────────────────────────────────────
+    timeline_card = tk.Frame(win, bg=CARD,
+                             highlightbackground=BORDER, highlightthickness=1)
+    timeline_card.pack(fill='x', padx=PAD_LG, pady=(0, PAD_MD))
+
+    timeline_inner = tk.Frame(timeline_card, bg=CARD)
+    timeline_inner.pack(pady=PAD_SM)
+
+    step_labels = []
+    for i, ev in enumerate(event_sequence):
+        col = EVENT_COLORS[ev]
+
+        cell = tk.Frame(timeline_inner, bg=CARD)
+        cell.pack(side='left', padx=PAD_LG)
+
+        dot = tk.Frame(cell, bg=BORDER, width=10, height=10)
+        dot.pack()
+
+        lbl = tk.Label(cell,
+                       text=EVENT_LABELS[ev],
+                       font=F_SMALL, fg=TEXT3, bg=CARD)
+        lbl.pack()
+
+        if i < len(event_sequence) - 1:
+            tk.Label(timeline_inner,
+                     text="————",
+                     font=F_SMALL, fg=BORDER, bg=CARD).pack(side='left')
+
+        step_labels.append((dot, lbl, col))
+
+    # ── Navigation controls ───────────────────────────────────────────
+    nav_card = tk.Frame(win, bg=CARD,
+                        highlightbackground=BORDER, highlightthickness=1)
+    nav_card.pack(fill='x', padx=PAD_LG, pady=(0, PAD_LG))
+
+    nav_inner = tk.Frame(nav_card, bg=CARD)
+    nav_inner.pack(pady=PAD_MD)
+
+    # ── UPDATE FUNCTION ───────────────────────────────────────────────
     def update_display():
-        raid_num = current_raid.get()
+        raid_num  = current_raid.get()
         event_idx = current_event_idx.get()
         event_type = event_sequence[event_idx]
-        
-        # Update info labels
-        raid_info.set(f"Raid #{raid_num} ({list(raids_data.keys()).index(raid_num) + 1}/{len(raids_data)})")
-        event_info.set(f"Event: {event_type.upper()} ({event_idx + 1}/4)")
-        
-        # Check if this event exists for current raid
+
+        # Info strip
+        raid_num_lbl.config(text=f"Raid #{raid_num}")
+        pos = list(raids_data.keys()).index(raid_num) + 1
+        raid_counter_lbl.config(text=f"({pos} of {len(raids_data)})")
+
+        ev_color = EVENT_COLORS[event_type]
+        event_badge.config(
+            text=f"  {EVENT_LABELS[event_type].upper()}  ",
+            bg=ev_color)
+        event_step_lbl.config(text=f"Step {event_idx + 1} / {len(event_sequence)}")
+
+        # Timeline dots
+        for i, (dot, lbl, col) in enumerate(step_labels):
+            if i < event_idx:
+                dot.config(bg=TEXT3)
+                lbl.config(fg=TEXT3)
+            elif i == event_idx:
+                dot.config(bg=col)
+                lbl.config(fg=col, font=('Segoe UI', 9, 'bold'))
+            else:
+                dot.config(bg=BORDER)
+                lbl.config(fg=TEXT3, font=F_SMALL)
+
+        # Image or not-detected panel
         frame_file = raids_data[raid_num].get(event_type)
-        
+
         if frame_file:
-            # Show image
-            message_label.pack_forget()
+            not_detected_frame.pack_forget()
             frame_label.pack(fill='both', expand=True)
-            
+
             frame_path = os.path.join(keyframes_dir, frame_file)
             if os.path.exists(frame_path):
                 img = cv2.imread(frame_path)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, (900, 550))
-                
+                img = cv2.resize(img, (960, 520))
                 photo = ImageTk.PhotoImage(Image.fromarray(img))
                 frame_label.configure(image=photo)
                 frame_label.image = photo
         else:
-            # Show "not detected" message
             frame_label.pack_forget()
-            message_label.pack(fill='both', expand=True, pady=100)
-            
-            line_name = {
-                'start': 'MIDLINE (Raid Start)',
-                'baulk': 'BAULK LINE',
-                'bonus': 'BONUS LINE',
-                'end': 'END LINE (Return to Midline)'
-            }.get(event_type, event_type.upper())
-            
-            message_label.config(text=f"⚠ NOT DETECTED\n\nRaider did not cross {line_name}")
-    
-    # Control buttons
-    control_frame = tk.Frame(live_window, bg='#2c3e50')
-    control_frame.pack(fill='x', padx=20, pady=15)
-    
-    button_frame = tk.Frame(control_frame, bg='#2c3e50')
-    button_frame.pack()
-    
+            not_detected_frame.pack(fill='both', expand=True)
+            alert_icon.pack(pady=(PAD_XL, PAD_SM))
+            not_det_title.pack()
+            not_det_sub.config(
+                text=f"Raider did not cross  {LINE_NAMES.get(event_type, event_type.upper())}")
+            not_det_sub.pack(pady=(PAD_SM, 0))
+
+    # ── Navigation callbacks ──────────────────────────────────────────
     def next_event():
         event_idx = current_event_idx.get()
-        raid_num = current_raid.get()
-        
+        raid_num  = current_raid.get()
+
         if event_idx < len(event_sequence) - 1:
             current_event_idx.set(event_idx + 1)
         else:
             raid_keys = sorted(raids_data.keys())
-            current_raid_idx = raid_keys.index(raid_num)
-            
-            if current_raid_idx < len(raid_keys) - 1:
-                current_raid.set(raid_keys[current_raid_idx + 1])
+            idx = raid_keys.index(raid_num)
+            if idx < len(raid_keys) - 1:
+                current_raid.set(raid_keys[idx + 1])
                 current_event_idx.set(0)
             else:
-                messagebox.showinfo("End", "Reached end of all raids!")
+                messagebox.showinfo("End", "Reached the end of all raids!")
                 return
-        
         update_display()
-    
+
     def prev_event():
         event_idx = current_event_idx.get()
-        raid_num = current_raid.get()
-        
+        raid_num  = current_raid.get()
+
         if event_idx > 0:
             current_event_idx.set(event_idx - 1)
         else:
             raid_keys = sorted(raids_data.keys())
-            current_raid_idx = raid_keys.index(raid_num)
-            
-            if current_raid_idx > 0:
-                current_raid.set(raid_keys[current_raid_idx - 1])
+            idx = raid_keys.index(raid_num)
+            if idx > 0:
+                current_raid.set(raid_keys[idx - 1])
                 current_event_idx.set(len(event_sequence) - 1)
             else:
                 messagebox.showinfo("Start", "Already at the first event!")
                 return
-        
         update_display()
-    
+
     def jump_to_raid():
         raid_keys = sorted(raids_data.keys())
-        raid_num = simpledialog.askinteger("Jump to Raid", 
-                                          f"Enter raid number ({min(raid_keys)}-{max(raid_keys)}):",
-                                          minvalue=min(raid_keys), maxvalue=max(raid_keys))
+        raid_num  = simpledialog.askinteger(
+            "Jump to Raid",
+            f"Enter raid number ({min(raid_keys)}–{max(raid_keys)}):",
+            minvalue=min(raid_keys), maxvalue=max(raid_keys))
         if raid_num and raid_num in raids_data:
             current_raid.set(raid_num)
             current_event_idx.set(0)
             update_display()
-    
-    # Navigation buttons
-    tk.Button(button_frame, text="◀ Previous", command=prev_event, 
-             bg='#95a5a6', fg='white', font=("Arial", 12, "bold"), 
-             padx=20, pady=10, width=12).pack(side='left', padx=10)
-    
-    tk.Button(button_frame, text="Next ▶", command=next_event, 
-             bg='#3498db', fg='white', font=("Arial", 12, "bold"), 
-             padx=20, pady=10, width=12).pack(side='left', padx=10)
-    
-    tk.Button(button_frame, text="Jump to Raid", command=jump_to_raid, 
-             bg='#e67e22', fg='white', font=("Arial", 12, "bold"), 
-             padx=20, pady=10, width=12).pack(side='left', padx=10)
-    
-    # Initial display
+
+    # ── Nav buttons ───────────────────────────────────────────────────
+    flat_btn(nav_inner, "◀  Previous",
+             command=prev_event,
+             color='#475569').pack(side='left', padx=PAD_SM)
+
+    flat_btn(nav_inner, "Next  ▶",
+             command=next_event,
+             color=PRIMARY).pack(side='left', padx=PAD_SM)
+
+    flat_btn(nav_inner, "Jump to Raid",
+             command=jump_to_raid,
+             color=ACCENT).pack(side='left', padx=PAD_SM)
+
+    # Keyboard shortcuts
+    win.bind('<Right>', lambda e: next_event())
+    win.bind('<Left>',  lambda e: prev_event())
+
+    # Shortcut hint
+    tk.Label(nav_inner,
+             text="  ← → arrow keys to navigate",
+             font=F_SMALL, fg=TEXT3, bg=CARD).pack(side='right', padx=PAD_MD)
+
+    # ── Initial display ───────────────────────────────────────────────
     update_display()

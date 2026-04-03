@@ -3,7 +3,6 @@ import os
 # Go up two levels: src/ui -> src -> root
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import matplotlib.pyplot as plt
@@ -21,36 +20,54 @@ from player_dashboard import PlayerDashboard
 from keyframe_viewer import open_keyframe_viewer
 from player_table import PlayerTable
 
+from theme import (
+    apply_theme, page_header, card, flat_btn,
+    entry as make_entry,
+    section_header, divider,
+    apply_chart_style, figure_bg,
+    BG, CARD, BORDER, PRIMARY, SUCCESS, ACCENT, DANGER,
+    TEXT, TEXT2, TEXT3, WHITE,
+    F_H2, F_H3, F_BODY, F_SMALL, F_LABEL, F_MONO,
+    C_BLUE, C_GREEN, C_ORANGE, C_RED,
+    PAD_SM, PAD_MD, PAD_LG, PAD_XL,
+)
+
+
 class KabaddiAnalyticsApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Kabaddi Analytics System")
         self.root.geometry("1400x900")
-        self.root.configure(bg='#2c3e50')
-        
+
+        # Apply the unified design system
+        apply_theme(root)
+
         # Initialize player profile manager
         root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         profiles_file = os.path.join(root_dir, 'data', 'player_profiles.json')
         self.profile_manager = PlayerProfileManager(profiles_file)
-        
+
         # Load synthetic data
         self.load_data()
-        
+
         # Create main interface
         self.create_main_interface()
-        
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  DATA LAYER  (backend — unchanged)
+    # ──────────────────────────────────────────────────────────────────────
+
     def load_data(self):
         """Load extracted raid data and calculate rankings"""
         self.data = []
         root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        
-        # Force load synthetic data
+
         csv_path = os.path.join(root_dir, "data", "synthetic", "synthetic_data.csv")
         print(f"\n{'='*70}")
         print(f"LOADING DATA FROM: {csv_path}")
         print(f"File exists: {os.path.exists(csv_path)}")
         print(f"{'='*70}\n")
-        
+
         try:
             with open(csv_path, 'r') as f:
                 reader = csv.DictReader(f)
@@ -64,279 +81,321 @@ class KabaddiAnalyticsApp:
                             'success': int(row['success']),
                             'raid_points': int(row.get('raid_points', 0) or 0)
                         })
-                    except (ValueError, KeyError) as e:
+                    except (ValueError, KeyError):
                         continue
-            
+
             print(f"✓ Loaded {len(self.data)} raids")
             print(f"✓ Unique players: {len(set(row['player_id'] for row in self.data))}")
             self.update_rankings()
-            
+
         except FileNotFoundError:
             print("ERROR: synthetic_data.csv not found!")
             self.create_sample_data()
-            
+
     def create_sample_data(self):
         """Create realistic synthetic data: 28 players (7 per team, 4 teams), each played 3+ matches"""
         import random
-        
         self.data = []
-        
-        # 4 teams, 7 players each = 28 players
         teams = ['TeamA', 'TeamB', 'TeamC', 'TeamD']
         players = [f"{team}_P{i}" for team in teams for i in range(1, 8)]
-        
-        # 12 matches (each team plays 3 matches minimum)
         matches = [f'M{i}' for i in range(1, 13)]
-        
-        # Assign matches to teams (each team plays at least 3)
         team_matches = {team: matches[i*3:(i+1)*3] for i, team in enumerate(teams)}
-        
+
         for player in players:
             team = player.split('_')[0]
-            player_matches = team_matches[team]
-            
-            for match in player_matches:
-                raids_in_match = random.randint(8, 20)
-                
-                for _ in range(raids_in_match):
-                    duration = round(random.uniform(2.5, 7.5), 1)
-                    penetration = round(random.uniform(1.0, 5.0), 2)  # meters
-                    success = random.choices([0, 1], weights=[40, 60])[0]
+            for match in team_matches[team]:
+                for _ in range(random.randint(8, 20)):
+                    duration    = round(random.uniform(2.5, 7.5), 1)
+                    penetration = round(random.uniform(1.0, 5.0), 2)
+                    success     = random.choices([0, 1], weights=[40, 60])[0]
                     raid_points = random.choices([1, 2, 3], weights=[60, 30, 10])[0] if success else 0
-                    
                     self.data.append({
-                        'match_id': match,
-                        'player_id': player,
+                        'match_id': match, 'player_id': player,
                         'raid_duration_sec': duration,
                         'penetration_px': penetration,
-                        'success': success,
-                        'raid_points': raid_points
+                        'success': success, 'raid_points': raid_points
                     })
-        
+
         self.save_data()
         self.update_rankings()
-        
+
     def save_data(self):
         """Save data to CSV"""
-        csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "synthetic", "synthetic_data.csv")
+        csv_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            "data", "synthetic", "synthetic_data.csv")
         os.makedirs(os.path.dirname(csv_path), exist_ok=True)
         with open(csv_path, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['match_id', 'player_id', 'raid_duration_sec', 'penetration_px', 'success', 'raid_points'])
+            writer = csv.DictWriter(f, fieldnames=[
+                'match_id', 'player_id', 'raid_duration_sec',
+                'penetration_px', 'success', 'raid_points'])
             writer.writeheader()
             writer.writerows(self.data)
-        
+
     def update_rankings(self):
         """Calculate player rankings from data"""
         self.player_stats = {}
-        
-        # Group data by player and match
         player_data = {}
         for row in self.data:
-            player_id = row['player_id']
-            if player_id not in player_data:
-                player_data[player_id] = []
-            player_data[player_id].append(row)
-        
-        # Calculate stats for each player
+            player_data.setdefault(row['player_id'], []).append(row)
+
         for player_id, raids_data in player_data.items():
-            # Group by match to get match order
             matches = {}
             for row in raids_data:
-                match_id = row['match_id']
-                if match_id not in matches:
-                    matches[match_id] = []
-                matches[match_id].append(row)
-            
-            # Sort matches (assuming M1, M2, M3... format)
-            sorted_matches = sorted(matches.keys(), key=lambda x: int(x[1:]) if x[1:].isdigit() else 0)
-            
-            # Get last 15 matches for scoring
-            recent_matches = sorted_matches[-15:] if len(sorted_matches) > 15 else sorted_matches
-            
-            # All raids for display stats
-            all_raids = []
-            for row in raids_data:
-                all_raids.append({
-                    'duration': row['raid_duration_sec'],
-                    'penetration': row['penetration_px'],
-                    'success': bool(row['success']),
-                    'points': row.get('raid_points', 0)
-                })
-            
-            # Recent raids for scoring
-            recent_raids = []
-            for match_id in recent_matches:
-                for row in matches[match_id]:
-                    recent_raids.append({
-                        'duration': row['raid_duration_sec'],
-                        'penetration': row['penetration_px'],
-                        'success': bool(row['success']),
-                        'points': row.get('raid_points', 0)
-                    })
-            
-            # Build profile with recent raids for scoring, all raids for display
+                matches.setdefault(row['match_id'], []).append(row)
+
+            sorted_matches = sorted(
+                matches.keys(),
+                key=lambda x: int(x[1:]) if x[1:].isdigit() else 0)
+            recent_matches = sorted_matches[-15:]
+
+            all_raids = [{'duration': r['raid_duration_sec'],
+                          'penetration': r['penetration_px'],
+                          'success': bool(r['success']),
+                          'points': r.get('raid_points', 0)} for r in raids_data]
+
+            recent_raids = [{'duration': r['raid_duration_sec'],
+                             'penetration': r['penetration_px'],
+                             'success': bool(r['success']),
+                             'points': r.get('raid_points', 0)}
+                            for mid in recent_matches for r in matches[mid]]
+
             self.player_stats[player_id] = build_raider_profile(recent_raids, all_raids)
-        
-        # Calculate rankings based on recent performance
+
         ranking = rank_players(self.player_stats)
         self.final_ranking = assign_ranks(ranking)
-        
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  MAIN INTERFACE
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_main_interface(self):
-        # Title
-        title = tk.Label(self.root, text="Kabaddi Analytics System", 
-                        font=("Arial", 24, "bold"), fg='white', bg='#2c3e50')
-        title.pack(pady=20)
-        
-        # Create notebook for tabs
-        style = ttk.Style()
-        style.theme_use('clam')
-        style.configure('TNotebook', background='#34495e', borderwidth=0)
-        style.configure('TNotebook.Tab', padding=[20, 10], font=('Arial', 11, 'bold'))
-        
+        # Full-width branded page header
+        page_header(self.root,
+                    "Kabaddi Analytics System",
+                    "Performance Intelligence Platform")
+
+        # Tab bar
         self.notebook = ttk.Notebook(self.root)
-        self.notebook.pack(fill='both', expand=True, padx=20, pady=10)
-        
-        # Video Processing Tab
+        self.notebook.pack(fill='both', expand=True,
+                           padx=PAD_MD, pady=(PAD_SM, PAD_MD))
+
         self.video_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.video_frame, text="Video Processing")
-        self.create_video_tab()
-        
-        # Player Rankings Tab
+        self.notebook.add(self.video_frame,   text="  Video Processing  ")
+
         self.ranking_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.ranking_frame, text="Player Rankings")
-        self.create_ranking_tab()
-        
-        # Analytics Tab
+        self.notebook.add(self.ranking_frame, text="  Player Rankings  ")
+
         self.analytics_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.analytics_frame, text="Analytics")
-        self.create_analytics_tab()
-        
-        # Teams Tab
+        self.notebook.add(self.analytics_frame, text="  Analytics  ")
+
         self.teams_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.teams_frame, text="Teams")
+        self.notebook.add(self.teams_frame,   text="  Teams  ")
+
+        self.create_video_tab()
+        self.create_ranking_tab()
+        self.create_analytics_tab()
         self.create_teams_tab()
-        
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  VIDEO TAB
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_video_tab(self):
-        # Video upload section
-        upload_frame = tk.LabelFrame(self.video_frame, text="Video Upload & Processing", 
-                                   font=("Arial", 14, "bold"), padx=10, pady=10)
-        upload_frame.pack(fill='x', padx=10, pady=10)
-        
-        # File selection
+        outer = tk.Frame(self.video_frame, bg=BG)
+        outer.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
+
+        # ── Upload controls card ──────────────────────────────────────────
+        upload_frame = card(outer, padx=PAD_LG, pady=PAD_MD)
+        upload_frame.pack(fill='x', pady=(0, PAD_MD))
+
+        _card_title(upload_frame, "Video Upload & Processing")
+
+        # File selection row
+        file_row = tk.Frame(upload_frame, bg=CARD)
+        file_row.pack(fill='x', pady=(PAD_SM, 0))
+
+        flat_btn(file_row, "Select Video File",
+                 command=self.select_video_file,
+                 color=PRIMARY).pack(side='left')
+
         self.selected_file = tk.StringVar(value="No file selected")
-        file_frame = tk.Frame(upload_frame)
-        file_frame.pack(fill='x', pady=5)
-        
-        tk.Button(file_frame, text="Select Video File", command=self.select_video_file,
-                 bg='#3498db', fg='white', font=("Arial", 12)).pack(side='left', padx=5)
-        
-        tk.Label(file_frame, textvariable=self.selected_file, 
-                font=("Arial", 10)).pack(side='left', padx=10)
-        
-        # Processing buttons
-        button_frame = tk.Frame(upload_frame)
-        button_frame.pack(fill='x', pady=10)
-        
-        tk.Button(button_frame, text="Setup Court Lines", command=self.setup_court_lines,
-                 bg='#e67e22', fg='white', font=("Arial", 14, "bold"), padx=20, pady=10).pack(side='left', padx=10)
-        
-        tk.Button(button_frame, text="Process Video", command=self.process_video,
-                 bg='#27ae60', fg='white', font=("Arial", 14, "bold"), padx=20, pady=10).pack(side='left', padx=10)
-        
-        tk.Button(button_frame, text="View Live Process", command=self.view_live_process,
-                 bg='#3498db', fg='white', font=("Arial", 14, "bold"), padx=20, pady=10).pack(side='left', padx=10)
-        
-        # Status display
-        self.status_text = tk.Text(upload_frame, height=15, width=80)
-        self.status_text.pack(fill='both', expand=True, pady=10)
-        
+        tk.Label(file_row, textvariable=self.selected_file,
+                 font=F_BODY, fg=TEXT2, bg=CARD).pack(side='left', padx=PAD_MD)
+
+        # Action buttons row
+        btn_row = tk.Frame(upload_frame, bg=CARD)
+        btn_row.pack(fill='x', pady=(PAD_SM, 0))
+
+        flat_btn(btn_row, "Setup Court Lines",
+                 command=self.setup_court_lines,
+                 color=ACCENT).pack(side='left', padx=(0, PAD_SM))
+        flat_btn(btn_row, "Process Video",
+                 command=self.process_video,
+                 color=SUCCESS).pack(side='left', padx=(0, PAD_SM))
+        flat_btn(btn_row, "View Live Process",
+                 command=self.view_live_process,
+                 color=PRIMARY).pack(side='left')
+
+        # ── Console card ──────────────────────────────────────────────────
+        console_card = card(outer, padx=0, pady=0)
+        console_card.pack(fill='both', expand=True)
+
+        # Dark console header bar
+        console_bar = tk.Frame(console_card, bg='#1e293b', padx=PAD_MD, pady=6)
+        console_bar.pack(fill='x')
+        tk.Label(console_bar, text="Processing Log",
+                 font=('Segoe UI', 9, 'bold'), fg='#94a3b8',
+                 bg='#1e293b').pack(side='left')
+
+        # Text area with scrollbar
+        text_container = tk.Frame(console_card, bg='#0f172a')
+        text_container.pack(fill='both', expand=True)
+
+        vsb = ttk.Scrollbar(text_container, orient='vertical')
+        vsb.pack(side='right', fill='y')
+
+        self.status_text = tk.Text(
+            text_container,
+            font=F_MONO,
+            bg='#0f172a', fg='#94a3b8',
+            relief='flat', borderwidth=0,
+            padx=PAD_MD, pady=PAD_SM,
+            insertbackground=TEXT3,
+            selectbackground='#334155',
+            selectforeground=WHITE,
+            yscrollcommand=vsb.set,
+            wrap='word'
+        )
+        vsb.config(command=self.status_text.yview)
+        self.status_text.pack(fill='both', expand=True)
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  RANKING TAB
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_ranking_tab(self):
-        # Control panel
-        control_frame = tk.LabelFrame(self.ranking_frame, text="Player Management", 
-                                    font=("Arial", 14, "bold"), padx=10, pady=10)
-        control_frame.pack(fill='x', padx=10, pady=5)
-        
-        # Add new player section
-        add_frame = tk.Frame(control_frame)
-        add_frame.pack(fill='x', pady=5)
-        
-        tk.Label(add_frame, text="Add New Player Data:", font=("Arial", 12, "bold")).pack(anchor='w')
-        
-        # Input fields
-        input_frame = tk.Frame(add_frame)
-        input_frame.pack(fill='x', pady=5)
-        
-        tk.Label(input_frame, text="Match ID:").grid(row=0, column=0, padx=5, sticky='w')
-        self.match_id_entry = tk.Entry(input_frame, width=10)
-        self.match_id_entry.grid(row=0, column=1, padx=5)
-        
-        tk.Label(input_frame, text="Player ID:").grid(row=0, column=2, padx=5, sticky='w')
-        self.player_id_entry = tk.Entry(input_frame, width=10)
-        self.player_id_entry.grid(row=0, column=3, padx=5)
-        
-        tk.Label(input_frame, text="Duration (sec):").grid(row=1, column=0, padx=5, sticky='w')
-        self.duration_entry = tk.Entry(input_frame, width=10)
-        self.duration_entry.grid(row=1, column=1, padx=5)
-        
-        tk.Label(input_frame, text="Penetration (m):").grid(row=1, column=2, padx=5, sticky='w')
-        self.penetration_entry = tk.Entry(input_frame, width=10)
-        self.penetration_entry.grid(row=1, column=3, padx=5)
-        
-        tk.Label(input_frame, text="Success (1/0):").grid(row=2, column=0, padx=5, sticky='w')
-        self.success_entry = tk.Entry(input_frame, width=10)
-        self.success_entry.grid(row=2, column=1, padx=5)
-        
-        tk.Label(input_frame, text="Raid Points (0-7):").grid(row=2, column=2, padx=5, sticky='w')
-        self.points_entry = tk.Entry(input_frame, width=10)
-        self.points_entry.grid(row=2, column=3, padx=5)
-        
-        tk.Button(input_frame, text="Add Data", command=self.add_player_data,
-                 bg='#3498db', fg='white').grid(row=3, column=0, padx=10)
-        
-        # Delete player section
-        delete_frame = tk.Frame(add_frame)
-        delete_frame.pack(fill='x', pady=10)
-        
-        tk.Label(delete_frame, text="Delete Player:", font=("Arial", 12, "bold")).pack(anchor='w')
-        
-        delete_input_frame = tk.Frame(delete_frame)
-        delete_input_frame.pack(fill='x', pady=5)
-        
-        tk.Label(delete_input_frame, text="Player ID to Delete:").grid(row=0, column=0, padx=5, sticky='w')
-        self.delete_player_entry = tk.Entry(delete_input_frame, width=15)
-        self.delete_player_entry.grid(row=0, column=1, padx=5)
-        
-        tk.Button(delete_input_frame, text="Delete Player", command=self.delete_player_data,
-                 bg='#e74c3c', fg='white').grid(row=0, column=2, padx=10)
-        
-        # Rankings display
-        self.create_rankings_display()
-        
-    def create_rankings_display(self):
-        # Rankings table only
-        display_frame = tk.Frame(self.ranking_frame)
-        display_frame.pack(fill='both', expand=True, padx=10, pady=5)
-        
-        # Rankings table
-        table_frame = tk.LabelFrame(display_frame, text="Player Rankings", 
-                                  font=("Arial", 12, "bold"))
-        table_frame.pack(fill='both', expand=True, padx=5)
-        
-        # Create player table
-        columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration', 'Avg Duration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
+        outer = tk.Frame(self.ranking_frame, bg=BG)
+        outer.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
+
+        # ── Player Management card ────────────────────────────────────────
+        control_frame = card(outer, padx=PAD_LG, pady=PAD_MD)
+        control_frame.pack(fill='x', pady=(0, PAD_MD))
+
+        _card_title(control_frame, "Player Management")
+
+        # Two-column layout: Add | vertical rule | Delete
+        cols = tk.Frame(control_frame, bg=CARD)
+        cols.pack(fill='x', pady=(PAD_SM, 0))
+
+        # ── Add column ────────────────────────────────────────────────────
+        add_frame = tk.Frame(cols, bg=CARD)
+        add_frame.pack(side='left', fill='both', expand=True, padx=(0, PAD_LG))
+
+        tk.Label(add_frame, text="Add New Player Data",
+                 font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w', pady=(0, PAD_SM))
+
+        input_frame = tk.Frame(add_frame, bg=CARD)
+        input_frame.pack(fill='x')
+        input_frame.columnconfigure(1, weight=1)
+        input_frame.columnconfigure(3, weight=1)
+
+        def _lbl(text, row, col):
+            tk.Label(input_frame, text=text,
+                     font=F_LABEL, fg=TEXT2, bg=CARD).grid(
+                row=row, column=col, sticky='w',
+                padx=(0, PAD_SM), pady=6)
+
+        _lbl("Match ID",         0, 0)
+        self.match_id_entry = make_entry(input_frame, width=13)
+        self.match_id_entry.grid(row=0, column=1, sticky='ew',
+                                  padx=(0, PAD_LG), pady=6)
+
+        _lbl("Player ID",        0, 2)
+        self.player_id_entry = make_entry(input_frame, width=13)
+        self.player_id_entry.grid(row=0, column=3, sticky='ew', pady=6)
+
+        _lbl("Duration (sec)",   1, 0)
+        self.duration_entry = make_entry(input_frame, width=13)
+        self.duration_entry.grid(row=1, column=1, sticky='ew',
+                                  padx=(0, PAD_LG), pady=6)
+
+        _lbl("Penetration (m)",  1, 2)
+        self.penetration_entry = make_entry(input_frame, width=13)
+        self.penetration_entry.grid(row=1, column=3, sticky='ew', pady=6)
+
+        _lbl("Success (1/0)",    2, 0)
+        self.success_entry = make_entry(input_frame, width=13)
+        self.success_entry.grid(row=2, column=1, sticky='ew',
+                                 padx=(0, PAD_LG), pady=6)
+
+        _lbl("Raid Points (0-7)", 2, 2)
+        self.points_entry = make_entry(input_frame, width=13)
+        self.points_entry.grid(row=2, column=3, sticky='ew', pady=6)
+
+        flat_btn(input_frame, "+ Add Data",
+                 command=self.add_player_data,
+                 color=SUCCESS).grid(row=3, column=0, columnspan=2,
+                                     sticky='w', pady=(PAD_MD, 0))
+
+        # Vertical divider
+        tk.Frame(cols, bg=BORDER, width=1).pack(side='left', fill='y',
+                                                 padx=PAD_LG)
+
+        # ── Delete column ─────────────────────────────────────────────────
+        delete_frame = tk.Frame(cols, bg=CARD)
+        delete_frame.pack(side='left', fill='y')
+
+        tk.Label(delete_frame, text="Delete Player",
+                 font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w',
+                                                     pady=(0, PAD_SM))
+
+        tk.Label(delete_frame, text="Player ID",
+                 font=F_LABEL, fg=TEXT2, bg=CARD).pack(anchor='w')
+
+        del_row = tk.Frame(delete_frame, bg=CARD)
+        del_row.pack(fill='x', pady=(PAD_SM, PAD_MD))
+
+        self.delete_player_entry = make_entry(del_row, width=18)
+        self.delete_player_entry.pack(side='left')
+
+        flat_btn(delete_frame, "Delete Player",
+                 command=self.delete_player_data,
+                 color=DANGER).pack(anchor='w')
+
+        # ── Rankings table card ───────────────────────────────────────────
+        self.create_rankings_display(outer)
+
+    def create_rankings_display(self, parent=None):
+        if parent is None:
+            parent = self.ranking_frame
+
+        display_card = card(parent, padx=0, pady=0)
+        display_card.pack(fill='both', expand=True)
+
+        _card_title(display_card, "Player Rankings", padx=PAD_MD)
+
+        table_frame = tk.Frame(display_card, bg=CARD)
+        table_frame.pack(fill='both', expand=True)
+
+        columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration',
+                   'Avg Duration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
         self.ranking_table = PlayerTable(
-            table_frame, 
-            columns, 
-            self.profile_manager, 
-            self.player_stats, 
-            self.data, 
+            table_frame,
+            columns,
+            self.profile_manager,
+            self.player_stats,
+            self.data,
             self.final_ranking,
             self._open_dashboard
         )
-        
-        # Initial display
+
         self.update_display()
-        
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  VIDEO — backend helpers (unchanged)
+    # ──────────────────────────────────────────────────────────────────────
+
     def select_video_file(self):
         file_path = filedialog.askopenfilename(
             title="Select Kabaddi Video",
@@ -346,30 +405,26 @@ class KabaddiAnalyticsApp:
             self.selected_file.set(os.path.basename(file_path))
             self.video_path = file_path
             self.log_status(f"Selected video: {file_path}")
-            
+
     def setup_court_lines(self):
         if not hasattr(self, 'video_path'):
             messagebox.showerror("Error", "Please select a video file first!")
             return
-        
-        # Store the selected video path for later use
         self.current_video_path = self.video_path
         self.log_status("Setting up play area (court boundaries, midline, baulk, bonus)...")
         threading.Thread(target=self.run_setup_play_area, daemon=True).start()
-    
+
     def setup_midline(self):
-        # Redirect to play area setup
         self.setup_court_lines()
-        
+
     def run_setup_play_area(self):
         try:
             self.log_status("=== PLAY AREA SETUP PROCESS ===")
             self.log_status("Step 1/2: Preparing video...")
-            
-            # Use the stored video path
+
             target_path = self.current_video_path
             self.log_status(f"Using video: {os.path.basename(target_path)}")
-            
+
             self.log_status("Step 2/2: Interactive play area setup...")
             self.log_status(">>> INSTRUCTION: Click 13 points in order:")
             self.log_status("    1-5: Play box corners (pentagon, clockwise)")
@@ -377,16 +432,12 @@ class KabaddiAnalyticsApp:
             self.log_status("    8-9: Baulk line (2 points) - 3.75m from midline")
             self.log_status("    10-11: Bonus line (2 points) - 4.75m from midline")
             self.log_status("    12-13: End line (2 points) - 6.5m from midline")
-            
-            # Import and run setup_play_area
-            import subprocess
+
             root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             setup_script = os.path.join(root_dir, "court", "setup_play_area.py")
-            
-            # Run the setup script with the video path
-            result = subprocess.run([sys.executable, setup_script, target_path], 
-                                   capture_output=True, text=True)
-            
+            result = subprocess.run([sys.executable, setup_script, target_path],
+                                    capture_output=True, text=True)
+
             if result.returncode == 0:
                 self.log_status("Configuration saved successfully")
                 self.log_status("=== PLAY AREA SETUP COMPLETED SUCCESSFULLY ===")
@@ -394,96 +445,81 @@ class KabaddiAnalyticsApp:
                 self.log_status("Setup cancelled or failed")
                 if result.stderr:
                     self.log_status(f"Error: {result.stderr}")
-                
+
         except Exception as e:
             self.log_status(f"Error in play area setup: {str(e)}")
             import traceback
             traceback.print_exc()
-            
+
     def process_video(self):
         if not hasattr(self, 'video_path'):
             messagebox.showerror("Error", "Please select a video file first!")
             return
-        
-        # Store the selected video path for processing
         self.current_video_path = self.video_path
         self.log_status("Processing video for raid analysis...")
         threading.Thread(target=self.run_video_processing, daemon=True).start()
-        
+
     def run_video_processing(self):
         try:
             self.log_status("=== VIDEO PROCESSING PIPELINE ===")
-            
-            # Use the stored video path
             VIDEO_PATH = self.current_video_path
             self.log_status(f"Processing: {os.path.basename(VIDEO_PATH)}")
-            
-            # Check if play area is configured
+
             root_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             config_path = os.path.join(root_dir, "config", "play_area.json")
-            
+
             if not os.path.exists(config_path):
-                self.log_status("❌ No play area configuration found!")
+                self.log_status("No play area configuration found!")
                 self.log_status("Please run 'Setup Court Lines' first.")
                 return
-            
+
             self.log_status("Step 1/3: Initializing data extraction system...")
-            
             self.log_status("Step 2/3: Running raid extraction...")
             self.log_status(">>> Detecting players, tracking raids, extracting metrics <<<")
-            
-            # Import and run data extractor
+
             sys.path.append(os.path.join(root_dir, "scripts"))
             from scripts.data_extract import DataExtractor
-            
+
             extractor = DataExtractor(VIDEO_PATH)
-            raids = extractor.extract_data(display=True)  # Changed to True to show live processing
-            
+            raids = extractor.extract_data(display=True)
+
             self.log_status(f"Extraction complete! Total raids: {len(raids)}")
-            
             self.log_status("Step 3/3: Saving results...")
+
             output_path = VIDEO_PATH.replace('.mp4', '_raid_metrics.csv')
             extractor.save_results(output_path)
-            
-            # Copy to extracted folder
+
             extracted_dir = os.path.join("data", "extracted")
             os.makedirs(extracted_dir, exist_ok=True)
             extracted_path = os.path.join(extracted_dir, "extracted_data.csv")
             shutil.copy2(output_path, extracted_path)
-            
+
             self.log_status(f"Results saved to: {output_path}")
             self.log_status(f"Copied to: {extracted_path}")
             self.log_status("=== VIDEO PROCESSING COMPLETED SUCCESSFULLY ===")
-            
-            # Show extracted data and ask user for additional details
+
             self.show_extracted_data_dialog(raids, extracted_path)
-                
+
         except Exception as e:
             self.log_status(f"Error in video processing: {str(e)}")
             import traceback
             traceback.print_exc()
-            
+
     def run_full_pipeline(self):
         if not hasattr(self, 'video_path'):
             messagebox.showerror("Error", "Please select a video file first!")
             return
-        
-        # Store the selected video path for full pipeline
         self.current_video_path = self.video_path
         self.log_status("=== FULL PIPELINE EXECUTION ===")
         self.log_status("This will run: Setup Midline → Process Video automatically")
         self.log_status("Phase 1: Setting up midline configuration...")
         threading.Thread(target=self.full_pipeline_thread, daemon=True).start()
-        
+
     def full_pipeline_thread(self):
-        # Phase 1: Setup
         self.run_setup_play_area()
-        
-        # Check if setup was successful
         if "SETUP COMPLETED SUCCESSFULLY" in self.status_text.get("1.0", tk.END):
             self.log_status("Phase 2: Starting video processing...")
             self.run_video_processing()
-            
             if "PROCESSING COMPLETED SUCCESSFULLY" in self.status_text.get("1.0", tk.END):
                 self.log_status("=== FULL PIPELINE COMPLETED SUCCESSFULLY ===")
                 self.log_status("Play area configured and saved")
@@ -493,29 +529,42 @@ class KabaddiAnalyticsApp:
                 self.log_status("Pipeline failed at video processing stage")
         else:
             self.log_status("Pipeline failed at play area setup stage")
-            
+
     def show_extracted_data_dialog(self, raids, csv_path):
         """Show extracted raid data and ask user if they want to add to rankings"""
         dialog = tk.Toplevel(self.root)
         dialog.title("Extracted Raid Data")
-        dialog.geometry("900x700")
-        dialog.configure(bg='#ecf0f1')
-        
-        # Title
-        tk.Label(dialog, text="Raid Extraction Complete!", font=("Arial", 16, "bold"), bg='#ecf0f1').pack(pady=10)
-        
-        # Display extracted data
-        data_frame = tk.LabelFrame(dialog, text="Extracted Raids", font=("Arial", 12, "bold"), padx=10, pady=10)
-        data_frame.pack(fill='both', expand=True, padx=10, pady=5)
-        
-        # Treeview for raids
-        columns = ('Raider ID', 'Duration', 'Max Penetration', 'Crossed Bonus', 'Crossed Baulk', 'Avg Speed')
-        tree = ttk.Treeview(data_frame, columns=columns, show='headings', height=8)
-        
-        for col in columns:
+        dialog.geometry("960x740")
+        dialog.configure(bg=BG)
+
+        # Branded header strip
+        hdr = tk.Frame(dialog, bg=PRIMARY, pady=PAD_MD)
+        hdr.pack(fill='x')
+        tk.Label(hdr, text="Raid Extraction Complete",
+                 font=F_H3, fg=WHITE, bg=PRIMARY).pack(padx=PAD_LG, anchor='w')
+        tk.Label(hdr, text=f"{len(raids)} raids extracted — review and add to rankings below",
+                 font=F_SMALL, fg='#bfdbfe', bg=PRIMARY).pack(padx=PAD_LG, anchor='w')
+        tk.Frame(hdr, bg=SUCCESS, height=2).pack(fill='x', pady=(PAD_SM, 0))
+
+        body = tk.Frame(dialog, bg=BG)
+        body.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
+
+        # ── Raids table card ──────────────────────────────────────────────
+        data_card = card(body, padx=0, pady=0)
+        data_card.pack(fill='both', expand=True, pady=(0, PAD_MD))
+
+        tbl_hdr = tk.Frame(data_card, bg=CARD, padx=PAD_MD, pady=PAD_SM)
+        tbl_hdr.pack(fill='x')
+        tk.Label(tbl_hdr, text="Extracted Raids",
+                 font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w')
+        divider(data_card, bg=BORDER).pack(fill='x')
+
+        tbl_cols = ('Raider ID', 'Duration', 'Max Penetration',
+                    'Crossed Bonus', 'Crossed Baulk', 'Avg Speed')
+        tree = ttk.Treeview(data_card, columns=tbl_cols, show='headings', height=8)
+        for col in tbl_cols:
             tree.heading(col, text=col)
-            tree.column(col, width=120)
-        
+            tree.column(col, width=130, anchor='center')
         for raid in raids:
             tree.insert('', 'end', values=(
                 raid['raider_id'],
@@ -525,71 +574,84 @@ class KabaddiAnalyticsApp:
                 'Yes' if raid['crossed_baulk'] else 'No',
                 f"{raid['avg_speed']:.1f}px/s"
             ))
-        
-        tree.pack(fill='both', expand=True, padx=5, pady=5)
-        
-        # Form for additional details (shown immediately)
-        form_frame = tk.LabelFrame(dialog, text="Enter Details to Add to Rankings", font=("Arial", 12, "bold"), padx=20, pady=10)
-        form_frame.pack(fill='x', padx=10, pady=5)
-        
-        # Match ID
-        tk.Label(form_frame, text="Match ID:", font=("Arial", 10)).grid(row=0, column=0, sticky='w', pady=5, padx=5)
-        match_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        match_entry.grid(row=0, column=1, pady=5, padx=5)
+        tree_vsb = ttk.Scrollbar(data_card, orient='vertical', command=tree.yview)
+        tree.configure(yscrollcommand=tree_vsb.set)
+        tree_vsb.pack(side='right', fill='y', padx=(0, PAD_SM))
+        tree.pack(fill='both', expand=True, padx=PAD_MD, pady=PAD_SM)
+
+        # ── Entry form card ───────────────────────────────────────────────
+        form_card = card(body, padx=PAD_LG, pady=PAD_MD)
+        form_card.pack(fill='x')
+        _card_title(form_card, "Enter Details to Add to Rankings")
+
+        form_grid = tk.Frame(form_card, bg=CARD)
+        form_grid.pack(fill='x', pady=(PAD_SM, 0))
+        form_grid.columnconfigure(1, weight=1)
+        form_grid.columnconfigure(3, weight=1)
+
+        def _fl(text, row, col):
+            tk.Label(form_grid, text=text,
+                     font=F_LABEL, fg=TEXT2, bg=CARD).grid(
+                row=row, column=col, sticky='w',
+                padx=(0, PAD_SM), pady=6)
+
+        _fl("Match ID", 0, 0)
+        match_entry = make_entry(form_grid, width=22)
+        match_entry.grid(row=0, column=1, sticky='ew',
+                         padx=(0, PAD_LG), pady=6)
         match_entry.insert(0, "M_Video")
-        
-        # Player ID
-        tk.Label(form_frame, text="Player ID:", font=("Arial", 10)).grid(row=1, column=0, sticky='w', pady=5, padx=5)
-        
-        # Dropdown for existing players
+
+        _fl("Player ID", 0, 2)
         existing_players = list(set([row['player_id'] for row in self.data]))
         player_var = tk.StringVar()
-        player_combo = ttk.Combobox(form_frame, textvariable=player_var, width=22, font=("Arial", 10))
+        player_combo = ttk.Combobox(form_grid, textvariable=player_var,
+                                    width=20, font=F_BODY)
         player_combo['values'] = existing_players
-        player_combo.grid(row=1, column=1, pady=5, padx=5)
+        player_combo.grid(row=0, column=3, sticky='ew', pady=6)
         player_combo.set(f"P{raids[0]['raider_id']}" if raids else "P1")
-        
-        # Team Name
-        tk.Label(form_frame, text="Team Name:", font=("Arial", 10)).grid(row=2, column=0, sticky='w', pady=5, padx=5)
-        team_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        team_entry.grid(row=2, column=1, pady=5, padx=5)
+
+        _fl("Team Name", 1, 0)
+        team_entry = make_entry(form_grid, width=22)
+        team_entry.grid(row=1, column=1, sticky='ew',
+                        padx=(0, PAD_LG), pady=6)
         team_entry.insert(0, "Team_A")
-        
-        # Raid Points
-        tk.Label(form_frame, text="Raid Points (comma-separated):", font=("Arial", 10)).grid(row=3, column=0, sticky='w', pady=5, padx=5)
-        points_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        points_entry.grid(row=3, column=1, pady=5, padx=5)
+
+        _fl("Raid Points (comma-separated)", 2, 0)
+        points_entry = make_entry(form_grid, width=22)
+        points_entry.grid(row=2, column=1, sticky='ew',
+                          padx=(0, PAD_LG), pady=6)
         points_entry.insert(0, ",".join(["1" if r['crossed_baulk'] else "0" for r in raids]))
-        tk.Label(form_frame, text="(e.g., 1,2,0,3)", font=("Arial", 8), fg='gray').grid(row=3, column=2, sticky='w', padx=5)
-        
-        # Success
-        tk.Label(form_frame, text="Success (comma-separated 1/0):", font=("Arial", 10)).grid(row=4, column=0, sticky='w', pady=5, padx=5)
-        success_entry = tk.Entry(form_frame, width=25, font=("Arial", 10))
-        success_entry.grid(row=4, column=1, pady=5, padx=5)
+        tk.Label(form_grid, text="e.g. 1, 2, 0, 3",
+                 font=F_SMALL, fg=TEXT3, bg=CARD).grid(row=2, column=2, sticky='w')
+
+        _fl("Success (comma-separated 1/0)", 3, 0)
+        success_entry = make_entry(form_grid, width=22)
+        success_entry.grid(row=3, column=1, sticky='ew',
+                           padx=(0, PAD_LG), pady=6)
         success_entry.insert(0, ",".join(["1" if r['crossed_baulk'] else "0" for r in raids]))
-        tk.Label(form_frame, text="(e.g., 1,1,0,1)", font=("Arial", 8), fg='gray').grid(row=4, column=2, sticky='w', padx=5)
-        
+        tk.Label(form_grid, text="e.g. 1, 1, 0, 1",
+                 font=F_SMALL, fg=TEXT3, bg=CARD).grid(row=3, column=2, sticky='w')
+
         def add_to_rankings():
             try:
-                match_id = match_entry.get().strip()
-                player_id = player_var.get().strip()
-                team_name = team_entry.get().strip()
+                match_id   = match_entry.get().strip()
+                player_id  = player_var.get().strip()
+                team_name  = team_entry.get().strip()
                 points_str = points_entry.get().strip()
                 success_str = success_entry.get().strip()
-                
+
                 if not match_id or not player_id or not team_name:
                     messagebox.showerror("Error", "Match ID, Player ID, and Team Name are required!")
                     return
-                
-                # Parse points and success
-                points_list = [int(p.strip()) for p in points_str.split(',')]
+
+                points_list  = [int(p.strip()) for p in points_str.split(',')]
                 success_list = [int(s.strip()) for s in success_str.split(',')]
-                
+
                 if len(points_list) != len(raids) or len(success_list) != len(raids):
-                    messagebox.showerror("Error", f"Please provide exactly {len(raids)} values for points and success!")
+                    messagebox.showerror("Error",
+                        f"Please provide exactly {len(raids)} values for points and success!")
                     return
-                
-                # Add raids to data
+
                 for i, raid in enumerate(raids):
                     self.data.append({
                         'match_id': match_id,
@@ -599,263 +661,283 @@ class KabaddiAnalyticsApp:
                         'success': success_list[i],
                         'raid_points': points_list[i]
                     })
-                
+
                 self.save_data()
                 self.update_rankings()
                 self.update_display()
-                
                 dialog.destroy()
                 self.log_status(f"Added {len(raids)} raids for player {player_id} to rankings!")
-                messagebox.showinfo("Success", f"Successfully added {len(raids)} raids to rankings!")
-                
+                messagebox.showinfo("Success",
+                    f"Successfully added {len(raids)} raids to rankings!")
+
             except ValueError:
                 messagebox.showerror("Error", "Invalid input! Please enter valid numbers.")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to add data: {str(e)}")
-        
+
         def skip():
             dialog.destroy()
             self.log_status("Extracted data not added to rankings")
-        
-        # Buttons
-        button_frame = tk.Frame(dialog, bg='#ecf0f1')
-        button_frame.pack(pady=15)
-        
-        tk.Button(button_frame, text="Add to Rankings", command=add_to_rankings,
-                 bg='#27ae60', fg='white', font=("Arial", 11), padx=30).pack(side='left', padx=10)
-        tk.Button(button_frame, text="Skip", command=skip,
-                 bg='#e74c3c', fg='white', font=("Arial", 11), padx=30).pack(side='left', padx=10)
+
+        # Footer action row
+        footer = tk.Frame(dialog, bg=BG)
+        footer.pack(fill='x', padx=PAD_LG, pady=(0, PAD_LG))
+        flat_btn(footer, "Add to Rankings",
+                 command=add_to_rankings,
+                 color=SUCCESS).pack(side='left', padx=(0, PAD_SM))
+        flat_btn(footer, "Skip",
+                 command=skip,
+                 color=DANGER).pack(side='left')
+
     def delete_player_data(self):
         try:
             player_id = self.delete_player_entry.get().strip()
-            
             if not player_id:
                 messagebox.showerror("Error", "Player ID cannot be empty!")
                 return
-            
-            # Check if player exists
+
             player_exists = any(row['player_id'] == player_id for row in self.data)
-            
             if not player_exists:
                 messagebox.showerror("Error", f"Player {player_id} not found in database!")
                 return
-            
-            # Count raids to be deleted
-            raids_to_delete = len([row for row in self.data if row['player_id'] == player_id])
-            
-            # Confirm deletion
-            result = messagebox.askyesno(
-                "Confirm Deletion", 
+
+            raids_to_delete = len([row for row in self.data
+                                    if row['player_id'] == player_id])
+
+            if messagebox.askyesno(
+                "Confirm Deletion",
                 f"Are you sure you want to delete player {player_id}?\n\n"
                 f"This will remove {raids_to_delete} raid records permanently."
-            )
-            
-            if result:
-                # Remove all data for this player
+            ):
                 self.data = [row for row in self.data if row['player_id'] != player_id]
                 self.save_data()
-                
-                # Update rankings
                 self.update_rankings()
                 self.update_display()
-                
-                # Update team table if a team is selected
+
                 if hasattr(self, 'selected_team') and self.selected_team.get():
                     self.show_team_players(self.selected_team.get())
-                
-                # Clear entry
+
                 self.delete_player_entry.delete(0, tk.END)
-                
-                messagebox.showinfo("Success", f"Player {player_id} deleted successfully!\n{raids_to_delete} raid records removed.")
-            
+                messagebox.showinfo("Success",
+                    f"Player {player_id} deleted successfully!\n"
+                    f"{raids_to_delete} raid records removed.")
+
         except Exception as e:
             messagebox.showerror("Error", f"Failed to delete player: {str(e)}")
-            
+
     def add_player_data(self):
         try:
-            match_id = self.match_id_entry.get().strip()
-            player_id = self.player_id_entry.get().strip()
-            duration = float(self.duration_entry.get())
+            match_id    = self.match_id_entry.get().strip()
+            player_id   = self.player_id_entry.get().strip()
+            duration    = float(self.duration_entry.get())
             penetration = float(self.penetration_entry.get())
-            success = int(self.success_entry.get())
+            success     = int(self.success_entry.get())
             raid_points = int(self.points_entry.get()) if self.points_entry.get().strip() else 0
-            
+
             if not match_id:
                 match_id = "Manual"
             if not player_id:
                 messagebox.showerror("Error", "Player ID cannot be empty!")
                 return
-                
-            # Add to data
-            new_row = {
-                'match_id': match_id,
-                'player_id': player_id,
+
+            self.data.append({
+                'match_id': match_id, 'player_id': player_id,
                 'raid_duration_sec': duration,
                 'penetration_px': penetration,
-                'success': success,
-                'raid_points': raid_points
-            }
-            
-            self.data.append(new_row)
+                'success': success, 'raid_points': raid_points
+            })
             self.save_data()
-            
-            # Update rankings
             self.update_rankings()
             self.update_display()
-            
-            # Clear entries
-            self.match_id_entry.delete(0, tk.END)
-            self.player_id_entry.delete(0, tk.END)
-            self.duration_entry.delete(0, tk.END)
-            self.penetration_entry.delete(0, tk.END)
-            self.success_entry.delete(0, tk.END)
-            self.points_entry.delete(0, tk.END)
-            
-            messagebox.showinfo("Success", f"Data added for player {player_id} in match {match_id}!")
-            
+
+            for e in (self.match_id_entry, self.player_id_entry, self.duration_entry,
+                      self.penetration_entry, self.success_entry, self.points_entry):
+                e.delete(0, tk.END)
+
+            messagebox.showinfo("Success",
+                f"Data added for player {player_id} in match {match_id}!")
+
         except ValueError:
             messagebox.showerror("Error", "Please enter valid numeric values!")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to add data: {str(e)}")
-            
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  ANALYTICS TAB
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_analytics_tab(self):
-        """Create analytics tab with charts"""
-        # Create matplotlib figure with better spacing
-        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4)) = plt.subplots(2, 2, figsize=(12, 8))
-        self.fig.patch.set_facecolor('white')
-        self.fig.tight_layout(pad=3.0)
-        
-        self.canvas = FigureCanvasTkAgg(self.fig, self.analytics_frame)
+        """Create analytics tab with themed charts"""
+        outer = tk.Frame(self.analytics_frame, bg=BG)
+        outer.pack(fill='both', expand=True)
+
+        self.fig, ((self.ax1, self.ax2), (self.ax3, self.ax4)) = plt.subplots(
+            2, 2, figsize=(13, 8))
+        figure_bg(self.fig, BG)
+        self.fig.tight_layout(pad=3.5)
+
+        self.canvas = FigureCanvasTkAgg(self.fig, outer)
         self.canvas.draw()
-        self.canvas.get_tk_widget().pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # Initial chart update
+        self.canvas.get_tk_widget().pack(fill='both', expand=True,
+                                          padx=PAD_MD, pady=PAD_MD)
         self.update_charts()
-        
+
     def update_display(self):
-        # Update data references in tables
-        self.ranking_table.data = self.data
+        self.ranking_table.data         = self.data
         self.ranking_table.player_stats = self.player_stats
         self.ranking_table.final_ranking = self.final_ranking
-        
+
         if hasattr(self, 'team_table'):
-            self.team_table.data = self.data
+            self.team_table.data         = self.data
             self.team_table.player_stats = self.player_stats
             self.team_table.final_ranking = self.final_ranking
-        
-        # Repopulate ranking table
+
         self.ranking_table.populate()
-        
-        # Update charts
         self.update_charts()
-        
+
     def update_charts(self):
-        # Check if axes exist (analytics tab created)
         if not hasattr(self, 'ax1'):
             return
-            
-        # Clear previous plots
-        for ax in [self.ax1, self.ax2, self.ax3, self.ax4]:
+
+        for ax in (self.ax1, self.ax2, self.ax3, self.ax4):
             ax.clear()
-        
-        # Show top 10 players only for better readability
+
         top_players = [r['player_id'] for r in self.final_ranking[:10]]
+        # Wrap long IDs at underscore so they don't crowd the x-axis
+        labels = [p.replace('_', '\n') for p in top_players]
+
         scores = [r['score'] for r in self.final_ranking[:10]]
-        
-        # Chart 1: Overall Scores
-        self.ax1.bar(range(len(top_players)), scores, color='#3498db')
-        self.ax1.set_title('Player Scores (Top 10)', fontsize=12, fontweight='bold')
-        self.ax1.set_ylabel('Score', fontsize=10)
+
+        # ── Chart 1: Overall Scores ─────────────────────────────────────
+        bars1 = self.ax1.bar(range(len(top_players)), scores,
+                             color=C_BLUE, edgecolor='none', width=0.62)
+        if scores:
+            bars1[scores.index(max(scores))].set_color(ACCENT)
+        apply_chart_style(self.ax1, title='Overall Scores — Top 10', ylabel='Score')
         self.ax1.set_xticks(range(len(top_players)))
-        self.ax1.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
-        self.ax1.grid(axis='y', alpha=0.3)
-        
-        # Chart 2: Success Rates
-        success_rates = [self.player_stats[p].get('all_success_rate', self.player_stats[p]['success_rate']) for p in top_players]
-        self.ax2.bar(range(len(top_players)), success_rates, color='#2ecc71')
-        self.ax2.set_title('Success Rates (Top 10)', fontsize=12, fontweight='bold')
-        self.ax2.set_ylabel('Success Rate (%)', fontsize=10)
+        self.ax1.set_xticklabels(labels, rotation=35, ha='right', fontsize=7.5)
+
+        # ── Chart 2: Success Rates ──────────────────────────────────────
+        success_rates = [
+            self.player_stats[p].get('all_success_rate',
+                                      self.player_stats[p]['success_rate'])
+            for p in top_players
+        ]
+        bars2 = self.ax2.bar(range(len(top_players)), success_rates,
+                             color=C_GREEN, edgecolor='none', width=0.62)
+        if success_rates:
+            bars2[success_rates.index(max(success_rates))].set_color(ACCENT)
+        apply_chart_style(self.ax2, title='Success Rates — Top 10', ylabel='Success Rate (%)')
         self.ax2.set_xticks(range(len(top_players)))
-        self.ax2.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
-        self.ax2.grid(axis='y', alpha=0.3)
-        
-        # Chart 3: Average Penetration
-        penetrations = [self.player_stats[p].get('all_avg_penetration', self.player_stats[p]['avg_penetration']) for p in top_players]
-        self.ax3.bar(range(len(top_players)), penetrations, color='#e74c3c')
-        self.ax3.set_title('Avg Penetration (Top 10)', fontsize=12, fontweight='bold')
-        self.ax3.set_ylabel('Penetration (m)', fontsize=10)
+        self.ax2.set_xticklabels(labels, rotation=35, ha='right', fontsize=7.5)
+
+        # ── Chart 3: Average Penetration ────────────────────────────────
+        penetrations = [
+            self.player_stats[p].get('all_avg_penetration',
+                                      self.player_stats[p]['avg_penetration'])
+            for p in top_players
+        ]
+        bars3 = self.ax3.bar(range(len(top_players)), penetrations,
+                             color=C_RED, edgecolor='none', width=0.62)
+        if penetrations:
+            bars3[penetrations.index(max(penetrations))].set_color(ACCENT)
+        apply_chart_style(self.ax3, title='Avg Penetration — Top 10', ylabel='Penetration (m)')
         self.ax3.set_xticks(range(len(top_players)))
-        self.ax3.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
-        self.ax3.grid(axis='y', alpha=0.3)
-        
-        # Chart 4: Total Points
-        total_points = [sum(row.get('raid_points', 0) for row in self.data if row['player_id'] == p) for p in top_players]
-        self.ax4.bar(range(len(top_players)), total_points, color='#f39c12')
-        self.ax4.set_title('Total Points (Top 10)', fontsize=12, fontweight='bold')
-        self.ax4.set_ylabel('Points', fontsize=10)
+        self.ax3.set_xticklabels(labels, rotation=35, ha='right', fontsize=7.5)
+
+        # ── Chart 4: Total Points ───────────────────────────────────────
+        total_points = [
+            sum(row.get('raid_points', 0) for row in self.data
+                if row['player_id'] == p)
+            for p in top_players
+        ]
+        bars4 = self.ax4.bar(range(len(top_players)), total_points,
+                             color=C_ORANGE, edgecolor='none', width=0.62)
+        if total_points:
+            bars4[total_points.index(max(total_points))].set_color(PRIMARY)
+        apply_chart_style(self.ax4, title='Total Points — Top 10', ylabel='Points')
         self.ax4.set_xticks(range(len(top_players)))
-        self.ax4.set_xticklabels(top_players, rotation=45, ha='right', fontsize=8)
-        self.ax4.grid(axis='y', alpha=0.3)
-        
-        self.fig.tight_layout(pad=2.5)
+        self.ax4.set_xticklabels(labels, rotation=35, ha='right', fontsize=7.5)
+
+        self.fig.tight_layout(pad=2.8)
         self.canvas.draw()
-        
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  MISC CALLBACKS (unchanged)
+    # ──────────────────────────────────────────────────────────────────────
+
     def view_live_process(self):
         """Open keyframe viewer window"""
         open_keyframe_viewer(self.root)
-    
+
     def _open_dashboard(self, player_id, profile, stats):
-        """Open player dashboard - callback for PlayerTable"""
+        """Open player dashboard — callback for PlayerTable"""
         PlayerDashboard(self.root, player_id, profile, stats, self.profile_manager)
-    
+
     def log_status(self, message):
         self.status_text.insert(tk.END, f"{message}\n")
         self.status_text.see(tk.END)
         self.root.update()
-    
+
+    # ──────────────────────────────────────────────────────────────────────
+    #  TEAMS TAB
+    # ──────────────────────────────────────────────────────────────────────
+
     def create_teams_tab(self):
         """Create teams tab with team list and player tables"""
-        # Main container
-        main_container = tk.Frame(self.teams_frame, bg='#ecf0f1')
-        main_container.pack(fill='both', expand=True, padx=10, pady=10)
-        
-        # Left panel - Team list
-        left_panel = tk.LabelFrame(main_container, text="Teams", font=("Arial", 14, "bold"), 
-                                   bg='#ecf0f1', padx=10, pady=10)
-        left_panel.pack(side='left', fill='y', padx=(0, 10))
-        
-        # Get unique teams from player IDs
+        outer = tk.Frame(self.teams_frame, bg=BG)
+        outer.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
+
+        # ── Left: Team selector panel ─────────────────────────────────────
+        left_panel = card(outer, padx=PAD_MD, pady=PAD_MD)
+        left_panel.pack(side='left', fill='y', padx=(0, PAD_MD))
+
+        tk.Label(left_panel, text="Teams",
+                 font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w', pady=(0, PAD_SM))
+        divider(left_panel, bg=BORDER).pack(fill='x', pady=(0, PAD_SM))
+
         teams = set()
         for player_id in set(row['player_id'] for row in self.data):
             if '_' in player_id:
-                team = player_id.split('_')[0]
-                teams.add(team)
-        
+                teams.add(player_id.split('_')[0])
+
         self.selected_team = tk.StringVar()
-        
-        # Team buttons
+
         for team in sorted(teams):
-            btn = tk.Button(left_panel, text=team, font=("Arial", 12), 
-                          bg='#3498db', fg='white', width=15, pady=10,
-                          command=lambda t=team: self.show_team_players(t))
-            btn.pack(pady=5)
-        
-        # Right panel - Player table
-        right_panel = tk.Frame(main_container, bg='#ecf0f1')
+            b = tk.Button(
+                left_panel, text=f"  {team}",
+                command=lambda t=team: self.show_team_players(t),
+                bg=CARD, fg=TEXT2,
+                font=F_BODY, relief='flat', bd=0,
+                cursor='hand2', anchor='w',
+                activebackground='#f1f5f9',
+                activeforeground=PRIMARY,
+                padx=PAD_MD, pady=PAD_SM, width=14)
+            b.bind('<Enter>', lambda e, w=b: w.config(bg='#f1f5f9', fg=PRIMARY))
+            b.bind('<Leave>', lambda e, w=b: w.config(bg=CARD, fg=TEXT2))
+            b.pack(fill='x', pady=2)
+
+        # ── Right: Players panel ──────────────────────────────────────────
+        right_panel = tk.Frame(outer, bg=BG)
         right_panel.pack(side='left', fill='both', expand=True)
-        
-        # Team name label
-        self.team_name_label = tk.Label(right_panel, text="Select a team", 
-                                       font=("Arial", 16, "bold"), bg='#ecf0f1')
-        self.team_name_label.pack(pady=10)
-        
-        # Player table
-        table_frame = tk.Frame(right_panel)
-        table_frame.pack(fill='both', expand=True)
-        
-        columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration', 'Total Points', 'Total Raids', 'Avg Points', 'Matches')
+
+        # Team name header card
+        name_card = card(right_panel, padx=PAD_LG, pady=PAD_SM)
+        name_card.pack(fill='x', pady=(0, PAD_MD))
+        self.team_name_label = tk.Label(
+            name_card,
+            text="Select a team to view players",
+            font=F_H2, fg=TEXT2, bg=CARD)
+        self.team_name_label.pack(anchor='w')
+
+        # Player table card
+        table_card = card(right_panel, padx=0, pady=0)
+        table_card.pack(fill='both', expand=True)
+
+        columns = ('Rank', 'Player', 'Score', 'Success Rate', 'Avg Penetration',
+                   'Total Points', 'Total Raids', 'Avg Points', 'Matches')
         self.team_table = PlayerTable(
-            table_frame,
+            table_card,
             columns,
             self.profile_manager,
             self.player_stats,
@@ -863,14 +945,28 @@ class KabaddiAnalyticsApp:
             self.final_ranking,
             self._open_dashboard
         )
-    
+
     def show_team_players(self, team_name):
         """Display players for selected team"""
         self.selected_team.set(team_name)
-        self.team_name_label.config(text=f"{team_name} Players")
-        
-        # Populate table with team filter
-        self.team_table.populate(player_filter=lambda pid: pid.startswith(team_name + '_'))
+        self.team_name_label.config(
+            text=f"  {team_name}  —  Player Rankings",
+            fg=TEXT, font=F_H2)
+        self.team_table.populate(
+            player_filter=lambda pid: pid.startswith(team_name + '_'))
+
+
+# ── Module-level UI helper (shared across methods) ─────────────────────────
+
+def _card_title(parent, text, padx=PAD_MD):
+    """Renders a left-accented section title + divider inside a card."""
+    row = tk.Frame(parent, bg=CARD)
+    row.pack(fill='x', padx=padx, pady=(0, PAD_SM))
+    tk.Frame(row, bg=PRIMARY, width=3, height=18).pack(side='left',
+                                                        padx=(0, PAD_SM))
+    tk.Label(row, text=text, font=F_H3, fg=TEXT, bg=CARD).pack(side='left')
+    divider(parent, bg=BORDER).pack(fill='x', pady=(0, PAD_MD))
+
 
 if __name__ == "__main__":
     root = tk.Tk()
