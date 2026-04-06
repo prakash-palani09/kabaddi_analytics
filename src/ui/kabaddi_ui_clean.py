@@ -571,20 +571,21 @@ class KabaddiAnalyticsApp:
                  font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w')
         divider(data_card, bg=BORDER).pack(fill='x')
 
-        tbl_cols = ('Raider ID', 'Duration', 'Max Penetration',
-                    'Crossed Bonus', 'Crossed Baulk', 'Avg Speed')
+        tbl_cols = ('Raider ID', 'Duration', 'Max Penetration (m)',
+                    'Crossed Bonus', 'Crossed Baulk', 'Avg Speed (m/s)')
         tree = ttk.Treeview(data_card, columns=tbl_cols, show='headings', height=8)
         for col in tbl_cols:
             tree.heading(col, text=col)
-            tree.column(col, width=130, anchor='center')
+            tree.column(col, width=140, anchor='center')
+        from court.simplified_court import SimplifiedCourtDynamics
         for raid in raids:
             tree.insert('', 'end', values=(
                 raid['raider_id'],
                 f"{raid['duration']:.2f}s",
-                f"{raid['max_penetration']:.1f}px",
+                f"{raid['max_penetration']:.2f}m",
                 'Yes' if raid['crossed_bonus'] else 'No',
                 'Yes' if raid['crossed_baulk'] else 'No',
-                f"{raid['avg_speed']:.1f}px/s"
+                f"{raid['avg_speed']:.2f}m/s"
             ))
         tree_vsb = ttk.Scrollbar(data_card, orient='vertical', command=tree.yview)
         tree.configure(yscrollcommand=tree_vsb.set)

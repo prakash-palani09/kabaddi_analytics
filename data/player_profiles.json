@@ -184,5 +184,23 @@
     "name": "Player test_P3",
     "team": "test_2",
     "stats": {}
+  },
+  "test_p_1": {
+    "player_id": "test_p_1",
+    "name": "Player test_p_1",
+    "team": "test_t",
+    "stats": {}
+  },
+  "test_p11": {
+    "player_id": "test_p11",
+    "name": "Player test_p11",
+    "team": "test_m",
+    "stats": {}
+  },
+  "P11": {
+    "player_id": "P11",
+    "name": "Player P11",
+    "team": "Team_A",
+    "stats": {}
   }
 }

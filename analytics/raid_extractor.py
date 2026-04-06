@@ -117,18 +117,24 @@ class RaidMetricsExtractor:
         return (first_engage - raid_start) / self.fps
     
     def avg_speed(self, positions):
-        """Average movement speed in pixels/second"""
+        """Average movement speed in meters/second"""
         if len(positions) < 2:
             return 0
-        
-        total_dist = 0
+
+        total_dist_px = 0
         for i in range(1, len(positions)):
             x1, y1, _ = positions[i-1]
             x2, y2, _ = positions[i]
-            total_dist += np.hypot(x2 - x1, y2 - y1)
-        
+            total_dist_px += np.hypot(x2 - x1, y2 - y1)
+
         duration = (positions[-1][2] - positions[0][2]) / self.fps
-        return total_dist / duration if duration > 0 else 0
+        if duration <= 0:
+            return 0
+
+        # Convert pixels to meters using court depth ratio
+        px_per_meter = self.court.depth_magnitude / self.court.END_DISTANCE
+        total_dist_m = total_dist_px / px_per_meter
+        return total_dist_m / duration
     
     def direction_changes(self, positions):
         """Count significant direction changes (agility indicator)"""

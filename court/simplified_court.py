@@ -147,17 +147,18 @@ class SimplifiedCourtDynamics:
         pixel_distance = abs(A * float(x) + B * float(y) + C) / denominator
         
         # Total perpendicular distance from midline to endline
-        # Use endline center point
-        ex, ey = float(self.end_line[0][0]), float(self.end_line[0][1])
+        # Use the CENTER of the end line (average of both endpoints) for accuracy
+        ex = (float(self.end_line[0][0]) + float(self.end_line[1][0])) / 2
+        ey = (float(self.end_line[0][1]) + float(self.end_line[1][1])) / 2
         total_pixel_depth = abs(A * ex + B * ey + C) / denominator
         
         if total_pixel_depth == 0:
             return 0.0
         
-        # Convert to meters
+        # Convert to meters and hard-clamp to [0, 6.5]
         meters = (pixel_distance / total_pixel_depth) * self.END_DISTANCE
         
-        return float(max(0.0, meters))
+        return float(max(0.0, min(meters, self.END_DISTANCE)))
     
     def crossed_baulk_line(self, point):
         """Check if point crossed the physical baulk line (treat as parallel)"""

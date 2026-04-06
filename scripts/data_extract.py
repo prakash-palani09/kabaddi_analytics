@@ -195,25 +195,20 @@ class DataExtractor:
                     feet_x = (x1 + x2) // 2
                     feet_y = y2  # Bottom of bounding box
                     
-                    # Track maximum penetration from ANY body part
+                    # Track maximum penetration using only INSIDE-COURT points
                     max_penetration_point = (feet_x, feet_y)
                     max_penetration_depth = self.court_dynamics.get_penetration_depth((feet_x, feet_y))
-                    
-                    # Check all keypoints for maximum penetration
+
+                    # Check keypoints — only those confirmed inside the play box
                     if keypoints is not None:
                         for kpt in keypoints:
                             if kpt[0] > 0 and kpt[1] > 0:
-                                kpt_depth = self.court_dynamics.get_penetration_depth((int(kpt[0]), int(kpt[1])))
-                                if kpt_depth > max_penetration_depth:
-                                    max_penetration_depth = kpt_depth
-                                    max_penetration_point = (int(kpt[0]), int(kpt[1]))
-                    
-                    # Also check bounding box corners for extended limbs
-                    for corner in [(x1, y2), (x2, y2), (feet_x, y2)]:
-                        corner_depth = self.court_dynamics.get_penetration_depth(corner)
-                        if corner_depth > max_penetration_depth:
-                            max_penetration_depth = corner_depth
-                            max_penetration_point = corner
+                                kp = (int(kpt[0]), int(kpt[1]))
+                                if self.court_dynamics.is_inside_play_box(kp):
+                                    kpt_depth = self.court_dynamics.get_penetration_depth(kp)
+                                    if kpt_depth > max_penetration_depth:
+                                        max_penetration_depth = kpt_depth
+                                        max_penetration_point = kp
                     
                     all_players[tid]['positions'].append((max_penetration_point[0], max_penetration_point[1], frame_count))
                     all_players[tid]['keypoints'].append(keypoints)
