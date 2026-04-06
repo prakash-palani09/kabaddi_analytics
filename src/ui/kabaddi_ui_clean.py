@@ -165,6 +165,13 @@ class KabaddiAnalyticsApp:
         ranking = rank_players(self.player_stats)
         self.final_ranking = assign_ranks(ranking)
 
+        # Auto-populate team in profile from player_id prefix (e.g. TeamA_P1 → TeamA)
+        for pid in self.player_stats:
+            profile = self.profile_manager.get_profile(pid)
+            if profile.team == 'Unknown Team' and '_' in pid:
+                profile.team = pid.split('_')[0]
+        self.profile_manager.save_profiles()
+
     # ──────────────────────────────────────────────────────────────────────
     #  MAIN INTERFACE
     # ──────────────────────────────────────────────────────────────────────
@@ -315,27 +322,32 @@ class KabaddiAnalyticsApp:
         self.player_id_entry = make_entry(input_frame, width=13)
         self.player_id_entry.grid(row=0, column=3, sticky='ew', pady=6)
 
-        _lbl("Duration (sec)",   1, 0)
+        _lbl("Team Name",        1, 0)
+        self.team_name_entry = make_entry(input_frame, width=13)
+        self.team_name_entry.grid(row=1, column=1, sticky='ew',
+                                   padx=(0, PAD_LG), pady=6)
+
+        _lbl("Duration (sec)",   1, 2)
         self.duration_entry = make_entry(input_frame, width=13)
-        self.duration_entry.grid(row=1, column=1, sticky='ew',
-                                  padx=(0, PAD_LG), pady=6)
+        self.duration_entry.grid(row=1, column=3, sticky='ew', pady=6)
 
-        _lbl("Penetration (m)",  1, 2)
+        _lbl("Penetration (m)",  2, 0)
         self.penetration_entry = make_entry(input_frame, width=13)
-        self.penetration_entry.grid(row=1, column=3, sticky='ew', pady=6)
+        self.penetration_entry.grid(row=2, column=1, sticky='ew',
+                                     padx=(0, PAD_LG), pady=6)
 
-        _lbl("Success (1/0)",    2, 0)
+        _lbl("Success (1/0)",    2, 2)
         self.success_entry = make_entry(input_frame, width=13)
-        self.success_entry.grid(row=2, column=1, sticky='ew',
-                                 padx=(0, PAD_LG), pady=6)
+        self.success_entry.grid(row=2, column=3, sticky='ew', pady=6)
 
-        _lbl("Raid Points (0-7)", 2, 2)
+        _lbl("Raid Points (0-7)", 3, 0)
         self.points_entry = make_entry(input_frame, width=13)
-        self.points_entry.grid(row=2, column=3, sticky='ew', pady=6)
+        self.points_entry.grid(row=3, column=1, sticky='ew',
+                                padx=(0, PAD_LG), pady=6)
 
         flat_btn(input_frame, "+ Add Data",
                  command=self.add_player_data,
-                 color=SUCCESS).grid(row=3, column=0, columnspan=2,
+                 color=SUCCESS).grid(row=4, column=0, columnspan=2,
                                      sticky='w', pady=(PAD_MD, 0))
 
         # Vertical divider
@@ -662,6 +674,10 @@ class KabaddiAnalyticsApp:
                         'raid_points': points_list[i]
                     })
 
+                # Save team name to profile so dashboard shows it correctly
+                self.profile_manager.update_profile(
+                    player_id, team=team_name)
+
                 self.save_data()
                 self.update_rankings()
                 self.update_display()
@@ -740,18 +756,22 @@ class KabaddiAnalyticsApp:
                 messagebox.showerror("Error", "Player ID cannot be empty!")
                 return
 
+            team_name = self.team_name_entry.get().strip()
             self.data.append({
                 'match_id': match_id, 'player_id': player_id,
                 'raid_duration_sec': duration,
                 'penetration_px': penetration,
                 'success': success, 'raid_points': raid_points
             })
+            if team_name:
+                self.profile_manager.update_profile(player_id, team=team_name)
             self.save_data()
             self.update_rankings()
             self.update_display()
 
-            for e in (self.match_id_entry, self.player_id_entry, self.duration_entry,
-                      self.penetration_entry, self.success_entry, self.points_entry):
+            for e in (self.match_id_entry, self.player_id_entry, self.team_name_entry,
+                      self.duration_entry, self.penetration_entry,
+                      self.success_entry, self.points_entry):
                 e.delete(0, tk.END)
 
             messagebox.showinfo("Success",
@@ -794,6 +814,7 @@ class KabaddiAnalyticsApp:
 
         self.ranking_table.populate()
         self.update_charts()
+        self._refresh_team_buttons()
 
     def update_charts(self):
         if not hasattr(self, 'ax1'):
@@ -883,6 +904,31 @@ class KabaddiAnalyticsApp:
     #  TEAMS TAB
     # ──────────────────────────────────────────────────────────────────────
 
+    def _refresh_team_buttons(self):
+        """Rebuild team buttons when new teams are added."""
+        if not hasattr(self, '_team_btn_frame'):
+            return
+        for w in self._team_btn_frame.winfo_children():
+            w.destroy()
+        teams = set()
+        for pid in set(row['player_id'] for row in self.data):
+            profile = self.profile_manager.get_profile(pid)
+            if profile.team and profile.team != 'Unknown Team':
+                teams.add(profile.team)
+            elif '_' in pid:
+                teams.add(pid.split('_')[0])
+        for team in sorted(teams):
+            b = tk.Button(
+                self._team_btn_frame, text=f"  {team}",
+                command=lambda t=team: self.show_team_players(t),
+                bg=CARD, fg=TEXT2, font=F_BODY, relief='flat', bd=0,
+                cursor='hand2', anchor='w',
+                activebackground='#f1f5f9', activeforeground=PRIMARY,
+                padx=PAD_MD, pady=PAD_SM, width=14)
+            b.bind('<Enter>', lambda e, w=b: w.config(bg='#f1f5f9', fg=PRIMARY))
+            b.bind('<Leave>', lambda e, w=b: w.config(bg=CARD, fg=TEXT2))
+            b.pack(fill='x', pady=2)
+
     def create_teams_tab(self):
         """Create teams tab with team list and player tables"""
         outer = tk.Frame(self.teams_frame, bg=BG)
@@ -898,14 +944,20 @@ class KabaddiAnalyticsApp:
 
         teams = set()
         for player_id in set(row['player_id'] for row in self.data):
-            if '_' in player_id:
+            # Check saved profile for team name first
+            profile = self.profile_manager.get_profile(player_id)
+            if profile.team and profile.team != 'Unknown Team':
+                teams.add(profile.team)
+            elif '_' in player_id:
                 teams.add(player_id.split('_')[0])
 
         self.selected_team = tk.StringVar()
 
+        self._team_btn_frame = tk.Frame(left_panel, bg=CARD)
+        self._team_btn_frame.pack(fill='x')
         for team in sorted(teams):
             b = tk.Button(
-                left_panel, text=f"  {team}",
+                self._team_btn_frame, text=f"  {team}",
                 command=lambda t=team: self.show_team_players(t),
                 bg=CARD, fg=TEXT2,
                 font=F_BODY, relief='flat', bd=0,
@@ -952,8 +1004,15 @@ class KabaddiAnalyticsApp:
         self.team_name_label.config(
             text=f"  {team_name}  —  Player Rankings",
             fg=TEXT, font=F_H2)
-        self.team_table.populate(
-            player_filter=lambda pid: pid.startswith(team_name + '_'))
+
+        def _team_filter(pid):
+            # Match by saved profile team name OR by ID prefix
+            profile = self.profile_manager.get_profile(pid)
+            if profile.team and profile.team != 'Unknown Team':
+                return profile.team == team_name
+            return pid.startswith(team_name + '_')
+
+        self.team_table.populate(player_filter=_team_filter)
 
 
 # ── Module-level UI helper (shared across methods) ─────────────────────────

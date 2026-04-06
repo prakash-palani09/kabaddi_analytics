@@ -8,7 +8,7 @@
   "test_p2": {
     "player_id": "test_p2",
     "name": "Player test_p2",
-    "team": "test_team",
+    "team": "test_team2",
     "stats": {}
   },
   "TeamC_P5": {
@@ -26,19 +26,163 @@
   "TeamB_P2": {
     "player_id": "TeamB_P2",
     "name": "Player TeamB_P2",
-    "team": "Unknown Team",
+    "team": "TeamB",
     "stats": {}
   },
   "TeamD_P2": {
     "player_id": "TeamD_P2",
     "name": "Player TeamD_P2",
-    "team": "Unknown Team",
+    "team": "TeamD",
     "stats": {}
   },
   "TeamC_P1": {
     "player_id": "TeamC_P1",
     "name": "Player TeamC_P1",
-    "team": "Unknown Team",
+    "team": "TeamC",
+    "stats": {}
+  },
+  "TeamA_P3": {
+    "player_id": "TeamA_P3",
+    "name": "Player TeamA_P3",
+    "team": "TeamA",
+    "stats": {}
+  },
+  "TeamA_P4": {
+    "player_id": "TeamA_P4",
+    "name": "Player TeamA_P4",
+    "team": "TeamA",
+    "stats": {}
+  },
+  "TeamA_P5": {
+    "player_id": "TeamA_P5",
+    "name": "Player TeamA_P5",
+    "team": "TeamA",
+    "stats": {}
+  },
+  "TeamA_P6": {
+    "player_id": "TeamA_P6",
+    "name": "Player TeamA_P6",
+    "team": "TeamA",
+    "stats": {}
+  },
+  "TeamA_P7": {
+    "player_id": "TeamA_P7",
+    "name": "Player TeamA_P7",
+    "team": "TeamA",
+    "stats": {}
+  },
+  "TeamB_P1": {
+    "player_id": "TeamB_P1",
+    "name": "Player TeamB_P1",
+    "team": "TeamB",
+    "stats": {}
+  },
+  "TeamB_P3": {
+    "player_id": "TeamB_P3",
+    "name": "Player TeamB_P3",
+    "team": "TeamB",
+    "stats": {}
+  },
+  "TeamB_P4": {
+    "player_id": "TeamB_P4",
+    "name": "Player TeamB_P4",
+    "team": "TeamB",
+    "stats": {}
+  },
+  "TeamB_P5": {
+    "player_id": "TeamB_P5",
+    "name": "Player TeamB_P5",
+    "team": "TeamB",
+    "stats": {}
+  },
+  "TeamB_P6": {
+    "player_id": "TeamB_P6",
+    "name": "Player TeamB_P6",
+    "team": "TeamB",
+    "stats": {}
+  },
+  "TeamB_P7": {
+    "player_id": "TeamB_P7",
+    "name": "Player TeamB_P7",
+    "team": "TeamB",
+    "stats": {}
+  },
+  "TeamC_P2": {
+    "player_id": "TeamC_P2",
+    "name": "Player TeamC_P2",
+    "team": "TeamC",
+    "stats": {}
+  },
+  "TeamC_P3": {
+    "player_id": "TeamC_P3",
+    "name": "Player TeamC_P3",
+    "team": "TeamC",
+    "stats": {}
+  },
+  "TeamC_P4": {
+    "player_id": "TeamC_P4",
+    "name": "Player TeamC_P4",
+    "team": "TeamC",
+    "stats": {}
+  },
+  "TeamC_P6": {
+    "player_id": "TeamC_P6",
+    "name": "Player TeamC_P6",
+    "team": "TeamC",
+    "stats": {}
+  },
+  "TeamC_P7": {
+    "player_id": "TeamC_P7",
+    "name": "Player TeamC_P7",
+    "team": "TeamC",
+    "stats": {}
+  },
+  "TeamD_P1": {
+    "player_id": "TeamD_P1",
+    "name": "Player TeamD_P1",
+    "team": "TeamD",
+    "stats": {}
+  },
+  "TeamD_P3": {
+    "player_id": "TeamD_P3",
+    "name": "Player TeamD_P3",
+    "team": "TeamD",
+    "stats": {}
+  },
+  "TeamD_P4": {
+    "player_id": "TeamD_P4",
+    "name": "Player TeamD_P4",
+    "team": "TeamD",
+    "stats": {}
+  },
+  "TeamD_P5": {
+    "player_id": "TeamD_P5",
+    "name": "Player TeamD_P5",
+    "team": "TeamD",
+    "stats": {}
+  },
+  "TeamD_P6": {
+    "player_id": "TeamD_P6",
+    "name": "Player TeamD_P6",
+    "team": "TeamD",
+    "stats": {}
+  },
+  "TeamD_P7": {
+    "player_id": "TeamD_P7",
+    "name": "Player TeamD_P7",
+    "team": "TeamD",
+    "stats": {}
+  },
+  "test_p_7": {
+    "player_id": "test_p_7",
+    "name": "Player test_p_7",
+    "team": "Arun",
+    "stats": {}
+  },
+  "test_P3": {
+    "player_id": "test_P3",
+    "name": "Player test_P3",
+    "team": "test_2",
     "stats": {}
   }
 }
