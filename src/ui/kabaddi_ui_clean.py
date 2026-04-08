@@ -190,6 +190,9 @@ class KabaddiAnalyticsApp:
         self.video_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.video_frame,   text="  Video Processing  ")
 
+        self.management_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.management_frame, text="  Player Management  ")
+
         self.ranking_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.ranking_frame, text="  Player Rankings  ")
 
@@ -200,6 +203,7 @@ class KabaddiAnalyticsApp:
         self.notebook.add(self.teams_frame,   text="  Teams  ")
 
         self.create_video_tab()
+        self.create_management_tab()
         self.create_ranking_tab()
         self.create_analytics_tab()
         self.create_teams_tab()
@@ -278,31 +282,20 @@ class KabaddiAnalyticsApp:
         self.status_text.pack(fill='both', expand=True)
 
     # ──────────────────────────────────────────────────────────────────────
-    #  RANKING TAB
+    #  PLAYER MANAGEMENT TAB  (add / delete only)
     # ──────────────────────────────────────────────────────────────────────
 
-    def create_ranking_tab(self):
-        outer = tk.Frame(self.ranking_frame, bg=BG)
+    def create_management_tab(self):
+        outer = tk.Frame(self.management_frame, bg=BG)
         outer.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
 
-        # ── Player Management card ────────────────────────────────────────
-        control_frame = card(outer, padx=PAD_LG, pady=PAD_MD)
-        control_frame.pack(fill='x', pady=(0, PAD_MD))
+        # ── Add New Player card ───────────────────────────────────────────
+        add_card = card(outer, padx=PAD_LG, pady=PAD_MD)
+        add_card.pack(fill='x', pady=(0, PAD_MD))
 
-        _card_title(control_frame, "Player Management")
+        _card_title(add_card, "Add New Player Data")
 
-        # Two-column layout: Add | vertical rule | Delete
-        cols = tk.Frame(control_frame, bg=CARD)
-        cols.pack(fill='x', pady=(PAD_SM, 0))
-
-        # ── Add column ────────────────────────────────────────────────────
-        add_frame = tk.Frame(cols, bg=CARD)
-        add_frame.pack(side='left', fill='both', expand=True, padx=(0, PAD_LG))
-
-        tk.Label(add_frame, text="Add New Player Data",
-                 font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w', pady=(0, PAD_SM))
-
-        input_frame = tk.Frame(add_frame, bg=CARD)
+        input_frame = tk.Frame(add_card, bg=CARD)
         input_frame.pack(fill='x')
         input_frame.columnconfigure(1, weight=1)
         input_frame.columnconfigure(3, weight=1)
@@ -311,71 +304,70 @@ class KabaddiAnalyticsApp:
             tk.Label(input_frame, text=text,
                      font=F_LABEL, fg=TEXT2, bg=CARD).grid(
                 row=row, column=col, sticky='w',
-                padx=(0, PAD_SM), pady=6)
+                padx=(0, PAD_SM), pady=8)
 
-        _lbl("Match ID",         0, 0)
-        self.match_id_entry = make_entry(input_frame, width=13)
+        _lbl("Match ID",          0, 0)
+        self.match_id_entry = make_entry(input_frame, width=18)
         self.match_id_entry.grid(row=0, column=1, sticky='ew',
-                                  padx=(0, PAD_LG), pady=6)
+                                  padx=(0, PAD_LG), pady=8)
 
-        _lbl("Player ID",        0, 2)
-        self.player_id_entry = make_entry(input_frame, width=13)
-        self.player_id_entry.grid(row=0, column=3, sticky='ew', pady=6)
+        _lbl("Player ID",         0, 2)
+        self.player_id_entry = make_entry(input_frame, width=18)
+        self.player_id_entry.grid(row=0, column=3, sticky='ew', pady=8)
 
-        _lbl("Team Name",        1, 0)
-        self.team_name_entry = make_entry(input_frame, width=13)
+        _lbl("Team Name",         1, 0)
+        self.team_name_entry = make_entry(input_frame, width=18)
         self.team_name_entry.grid(row=1, column=1, sticky='ew',
-                                   padx=(0, PAD_LG), pady=6)
+                                   padx=(0, PAD_LG), pady=8)
 
-        _lbl("Duration (sec)",   1, 2)
-        self.duration_entry = make_entry(input_frame, width=13)
-        self.duration_entry.grid(row=1, column=3, sticky='ew', pady=6)
+        _lbl("Duration (sec)",    1, 2)
+        self.duration_entry = make_entry(input_frame, width=18)
+        self.duration_entry.grid(row=1, column=3, sticky='ew', pady=8)
 
-        _lbl("Penetration (m)",  2, 0)
-        self.penetration_entry = make_entry(input_frame, width=13)
+        _lbl("Penetration (m)",   2, 0)
+        self.penetration_entry = make_entry(input_frame, width=18)
         self.penetration_entry.grid(row=2, column=1, sticky='ew',
-                                     padx=(0, PAD_LG), pady=6)
+                                     padx=(0, PAD_LG), pady=8)
 
-        _lbl("Success (1/0)",    2, 2)
-        self.success_entry = make_entry(input_frame, width=13)
-        self.success_entry.grid(row=2, column=3, sticky='ew', pady=6)
+        _lbl("Success (1/0)",     2, 2)
+        self.success_entry = make_entry(input_frame, width=18)
+        self.success_entry.grid(row=2, column=3, sticky='ew', pady=8)
 
         _lbl("Raid Points (0-7)", 3, 0)
-        self.points_entry = make_entry(input_frame, width=13)
+        self.points_entry = make_entry(input_frame, width=18)
         self.points_entry.grid(row=3, column=1, sticky='ew',
-                                padx=(0, PAD_LG), pady=6)
+                                padx=(0, PAD_LG), pady=8)
 
         flat_btn(input_frame, "+ Add Data",
                  command=self.add_player_data,
-                 color=SUCCESS).grid(row=4, column=0, columnspan=2,
-                                     sticky='w', pady=(PAD_MD, 0))
+                 color=SUCCESS).grid(row=4, column=0, columnspan=4,
+                                     sticky='w', pady=(PAD_LG, 0))
 
-        # Vertical divider
-        tk.Frame(cols, bg=BORDER, width=1).pack(side='left', fill='y',
-                                                 padx=PAD_LG)
+        # ── Delete Player card ────────────────────────────────────────────
+        del_card = card(outer, padx=PAD_LG, pady=PAD_MD)
+        del_card.pack(fill='x')
 
-        # ── Delete column ─────────────────────────────────────────────────
-        delete_frame = tk.Frame(cols, bg=CARD)
-        delete_frame.pack(side='left', fill='y')
+        _card_title(del_card, "Delete Player")
 
-        tk.Label(delete_frame, text="Delete Player",
-                 font=F_H3, fg=TEXT, bg=CARD).pack(anchor='w',
-                                                     pady=(0, PAD_SM))
+        del_row = tk.Frame(del_card, bg=CARD)
+        del_row.pack(anchor='w')
 
-        tk.Label(delete_frame, text="Player ID",
-                 font=F_LABEL, fg=TEXT2, bg=CARD).pack(anchor='w')
-
-        del_row = tk.Frame(delete_frame, bg=CARD)
-        del_row.pack(fill='x', pady=(PAD_SM, PAD_MD))
-
-        self.delete_player_entry = make_entry(del_row, width=18)
-        self.delete_player_entry.pack(side='left')
-
-        flat_btn(delete_frame, "Delete Player",
+        tk.Label(del_row, text="Player ID",
+                 font=F_LABEL, fg=TEXT2, bg=CARD).pack(side='left',
+                                                        padx=(0, PAD_SM))
+        self.delete_player_entry = make_entry(del_row, width=22)
+        self.delete_player_entry.pack(side='left', padx=(0, PAD_MD))
+        flat_btn(del_row, "Delete Player",
                  command=self.delete_player_data,
-                 color=DANGER).pack(anchor='w')
+                 color=DANGER).pack(side='left')
 
-        # ── Rankings table card ───────────────────────────────────────────
+    # ──────────────────────────────────────────────────────────────────────
+    #  PLAYER RANKINGS TAB  (table only — full height)
+    # ──────────────────────────────────────────────────────────────────────
+
+    def create_ranking_tab(self):
+        outer = tk.Frame(self.ranking_frame, bg=BG)
+        outer.pack(fill='both', expand=True, padx=PAD_LG, pady=PAD_LG)
         self.create_rankings_display(outer)
 
     def create_rankings_display(self, parent=None):

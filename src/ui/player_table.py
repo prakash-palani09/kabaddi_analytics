@@ -11,16 +11,16 @@ from theme import (
 
 # ── Per-column display config ──────────────────────────────────────────────
 _COL_CONFIG = {
-    'Rank':            dict(width=52,  anchor='center'),
-    'Player':          dict(width=130, anchor='w'),
-    'Score':           dict(width=80,  anchor='center'),
-    'Success Rate':    dict(width=100, anchor='center'),
-    'Avg Penetration': dict(width=115, anchor='center'),
-    'Avg Duration':    dict(width=100, anchor='center'),
-    'Total Points':    dict(width=95,  anchor='center'),
-    'Total Raids':     dict(width=85,  anchor='center'),
-    'Avg Points':      dict(width=90,  anchor='center'),
-    'Matches':         dict(width=72,  anchor='center'),
+    'Rank':            dict(width=64,  anchor='center'),
+    'Player':          dict(width=160, anchor='w'),
+    'Score':           dict(width=96,  anchor='center'),
+    'Success Rate':    dict(width=120, anchor='center'),
+    'Avg Penetration': dict(width=140, anchor='center'),
+    'Avg Duration':    dict(width=120, anchor='center'),
+    'Total Points':    dict(width=115, anchor='center'),
+    'Total Raids':     dict(width=105, anchor='center'),
+    'Avg Points':      dict(width=110, anchor='center'),
+    'Matches':         dict(width=90,  anchor='center'),
 }
 
 # Top-3 rank highlight colours
@@ -64,9 +64,9 @@ class PlayerTable:
 
         self._row_count_lbl = tk.Label(
             toolbar, text="",
-            font=('Segoe UI', 8, 'bold'),
+            font=('Segoe UI', 10, 'bold'),
             bg=PRIMARY, fg=WHITE,
-            relief='flat', padx=6, pady=2)
+            relief='flat', padx=8, pady=3)
         self._row_count_lbl.pack(side='right')
 
         # Thin divider below toolbar
@@ -117,15 +117,15 @@ class PlayerTable:
         self.tree.tag_configure('rank1',
                                 background=_RANK_COLORS[1][0],
                                 foreground=_RANK_COLORS[1][1],
-                                font=('Segoe UI', 10, 'bold'))
+                                font=('Segoe UI', 12, 'bold'))
         self.tree.tag_configure('rank2',
                                 background=_RANK_COLORS[2][0],
                                 foreground=_RANK_COLORS[2][1],
-                                font=('Segoe UI', 10, 'bold'))
+                                font=('Segoe UI', 12, 'bold'))
         self.tree.tag_configure('rank3',
                                 background=_RANK_COLORS[3][0],
                                 foreground=_RANK_COLORS[3][1],
-                                font=('Segoe UI', 10, 'bold'))
+                                font=('Segoe UI', 12, 'bold'))
 
         # Hover highlight
         self.tree.tag_configure('hover',

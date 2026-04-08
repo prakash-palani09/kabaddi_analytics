@@ -76,7 +76,7 @@ class PlayerDashboard:
     def __init__(self, parent, player_id, profile, stats, profile_manager):
         self.window = tk.Toplevel(parent)
         self.window.title(f"Player Dashboard — {player_id}")
-        self.window.geometry("1100x740")
+        self.window.geometry("1200x820")
         self.window.configure(bg=BG)
 
         self.player_id    = player_id
@@ -104,10 +104,10 @@ class PlayerDashboard:
 
         tk.Label(id_col,
                  text=self.player_id,
-                 font=F_H1, fg=WHITE, bg=PRIMARY).pack(anchor='w')
+                 font=('Segoe UI', 26, 'bold'), fg=WHITE, bg=PRIMARY).pack(anchor='w')
         tk.Label(id_col,
                  text=f"{self.profile.name}  ·  {self.profile.team}",
-                 font=F_BODY, fg='#bfdbfe', bg=PRIMARY).pack(anchor='w', pady=(2, 0))
+                 font=('Segoe UI', 13), fg='#bfdbfe', bg=PRIMARY).pack(anchor='w', pady=(2, 0))
 
         # Right: action button
         flat_btn(hdr_inner, "✎  Edit Profile",
@@ -132,7 +132,7 @@ class PlayerDashboard:
         left = tk.Frame(body, bg=BG)
         left.pack(side='left', fill='both', expand=False,
                   padx=(0, PAD_MD))
-        left.config(width=360)
+        left.config(width=400)
         left.pack_propagate(False)
 
         # Right column
@@ -159,11 +159,11 @@ class PlayerDashboard:
 
         def _row(label, value, row_num):
             tk.Label(grid, text=label,
-                     font=F_LABEL, fg=TEXT2, bg=CARD).grid(
-                row=row_num, column=0, sticky='w', pady=5)
+                     font=('Segoe UI', 11), fg=TEXT2, bg=CARD).grid(
+                row=row_num, column=0, sticky='w', pady=6)
             tk.Label(grid, text=value,
-                     font=('Segoe UI', 10, 'bold'), fg=TEXT, bg=CARD).grid(
-                row=row_num, column=1, sticky='w', padx=(PAD_MD, 0), pady=5)
+                     font=('Segoe UI', 12, 'bold'), fg=TEXT, bg=CARD).grid(
+                row=row_num, column=1, sticky='w', padx=(PAD_MD, 0), pady=6)
 
         _row("Player ID", self.player_id,   0)
         _row("Name",      self.profile.name, 1)
@@ -206,11 +206,11 @@ class PlayerDashboard:
             color = _STAT_COLORS[i]
             tk.Frame(tile, bg=color, height=3).pack(fill='x')
             tk.Label(tile, text=str(value),
-                     font=('Segoe UI', 13, 'bold'),
+                     font=('Segoe UI', 16, 'bold'),
                      fg=color, bg=BG).pack(anchor='w',
                                            padx=PAD_SM, pady=(PAD_SM, 0))
             tk.Label(tile, text=label,
-                     font=F_LABEL, fg=TEXT2, bg=BG).pack(
+                     font=('Segoe UI', 11), fg=TEXT2, bg=BG).pack(
                 anchor='w', padx=PAD_SM, pady=(0, PAD_SM))
 
     # ──────────────────────────────────────────────────────────────────────
@@ -268,7 +268,7 @@ class PlayerDashboard:
         normalized = [v / 100 for v in values]
 
         # ── Figure ────────────────────────────────────────────────────────
-        fig = plt.Figure(figsize=(6.2, 6.2), facecolor=CARD)
+        fig = plt.Figure(figsize=(7.0, 7.0), facecolor=CARD)
         ax  = fig.add_subplot(111)
         ax.set_facecolor(CARD)
 
@@ -282,7 +282,7 @@ class PlayerDashboard:
             ys = [r * np.sin(a) for a in angles] + [r * np.sin(angles[0])]
             ax.plot(xs, ys, color=gc, linewidth=0.8, zorder=1)
             ax.text(1, r + 2, f'{int(level * 100)}',
-                    ha='left', va='bottom', size=7.5,
+                    ha='left', va='bottom', size=9,
                     color=TEXT3, zorder=2)
 
         # Spoke lines
@@ -324,13 +324,13 @@ class PlayerDashboard:
                 lc = TEXT2
             ax.text(x, y, cat,
                     ha='center', va='center',
-                    size=11, weight='bold', color=lc, zorder=6)
+                    size=13, weight='bold', color=lc, zorder=6)
 
             # Small percentage underneath
             ax.text(x, y - MAX_RADIUS * 0.13,
                     f"{values[i]:.0f}%",
                     ha='center', va='center',
-                    size=8.5, color=TEXT2, zorder=6)
+                    size=10.5, color=TEXT2, zorder=6)
 
         ax.set_xlim(-MAX_RADIUS * 1.4, MAX_RADIUS * 1.4)
         ax.set_ylim(-MAX_RADIUS * 1.4, MAX_RADIUS * 1.4)

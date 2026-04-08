@@ -30,21 +30,21 @@ NAV_TEXT    = '#cbd5e1'
 NAV_TEXT_A  = '#ffffff'
 
 # ── Spacing & sizing constants ─────────────────────────────────────────────
-PAD_XS  = 4
-PAD_SM  = 8
-PAD_MD  = 14
-PAD_LG  = 20
-PAD_XL  = 28
+PAD_XS  = 6
+PAD_SM  = 10
+PAD_MD  = 16
+PAD_LG  = 24
+PAD_XL  = 32
 
 # ── Typography ─────────────────────────────────────────────────────────────
-F_H1    = ('Segoe UI', 22, 'bold')
-F_H2    = ('Segoe UI', 13, 'bold')
-F_H3    = ('Segoe UI', 11, 'bold')
-F_BODY  = ('Segoe UI', 10)
-F_SMALL = ('Segoe UI',  9)
-F_MONO  = ('Consolas',  9)
-F_STAT  = ('Segoe UI', 20, 'bold')   # large KPI value
-F_LABEL = ('Segoe UI',  9)           # field labels / captions
+F_H1    = ('Segoe UI', 26, 'bold')
+F_H2    = ('Segoe UI', 16, 'bold')
+F_H3    = ('Segoe UI', 13, 'bold')
+F_BODY  = ('Segoe UI', 12)
+F_SMALL = ('Segoe UI', 11)
+F_MONO  = ('Consolas', 11)
+F_STAT  = ('Segoe UI', 24, 'bold')   # large KPI value
+F_LABEL = ('Segoe UI', 11)           # field labels / captions
 
 # ── Chart colours ──────────────────────────────────────────────────────────
 C_BLUE   = '#2563eb'
@@ -77,8 +77,8 @@ def apply_theme(root):
     s.configure('TNotebook.Tab',
                 background='#f1f5f9',
                 foreground=TEXT2,
-                font=('Segoe UI', 10, 'bold'),
-                padding=[28, 11],
+                font=('Segoe UI', 12, 'bold'),
+                padding=[32, 13],
                 borderwidth=0)
     s.map('TNotebook.Tab',
           background=[('selected', CARD),      ('active', '#e8edf4')],
@@ -107,16 +107,16 @@ def apply_theme(root):
                 background=CARD,
                 foreground=TEXT,
                 fieldbackground=CARD,
-                font=F_BODY,
-                rowheight=38,
+                font=('Segoe UI', 12),
+                rowheight=44,
                 borderwidth=0,
                 relief='flat')
     s.configure('Treeview.Heading',
                 background='#f1f5f9',
                 foreground=TEXT2,
-                font=('Segoe UI', 9, 'bold'),
+                font=('Segoe UI', 11, 'bold'),
                 relief='flat',
-                padding=[12, 9])
+                padding=[14, 11])
     s.map('Treeview',
           background=[('selected', PRIMARY)],
           foreground=[('selected', WHITE)])
@@ -303,10 +303,10 @@ def flat_btn(parent, text, command, color=PRIMARY, hover=None, **kw):
     """Flat, coloured button with hover animation."""
     hov = hover or _darken(color)
     b = tk.Button(parent, text=text, command=command,
-                  bg=color, fg=WHITE, font=('Segoe UI', 10, 'bold'),
+                  bg=color, fg=WHITE, font=('Segoe UI', 12, 'bold'),
                   relief='flat', bd=0, cursor='hand2',
                   activebackground=hov, activeforeground=WHITE,
-                  padx=20, pady=9, **kw)
+                  padx=22, pady=11, **kw)
     b.bind('<Enter>', lambda e: b.config(bg=hov))
     b.bind('<Leave>', lambda e: b.config(bg=color))
     return b
@@ -367,9 +367,9 @@ def badge(parent, text, color=PRIMARY):
     """Small coloured pill badge."""
     return tk.Label(parent,
                     text=f'  {text}  ',
-                    font=('Segoe UI', 8, 'bold'),
+                    font=('Segoe UI', 10, 'bold'),
                     bg=color, fg=WHITE,
-                    relief='flat', padx=2, pady=2)
+                    relief='flat', padx=3, pady=3)
 
 
 def status_dot(parent, color=SUCCESS, label='', bg=CARD):
@@ -413,7 +413,7 @@ def apply_chart_style(ax, title='', ylabel='', xlabel='', facecolor=CARD):
     ax.spines['bottom'].set_color(BORDER)
 
     # Ticks
-    ax.tick_params(colors=TEXT2, labelsize=8, length=3, width=0.8)
+    ax.tick_params(colors=TEXT2, labelsize=10, length=3, width=0.8)
     ax.tick_params(axis='x', pad=4)
 
     # Grid — horizontal only
@@ -424,15 +424,15 @@ def apply_chart_style(ax, title='', ylabel='', xlabel='', facecolor=CARD):
     # Labels
     if title:
         ax.set_title(title,
-                     fontsize=11, fontweight='bold',
-                     color=TEXT, pad=14,
+                     fontsize=13, fontweight='bold',
+                     color=TEXT, pad=16,
                      fontfamily='Segoe UI')
     if ylabel:
-        ax.set_ylabel(ylabel, fontsize=9, color=TEXT2,
-                      labelpad=8, fontfamily='Segoe UI')
+        ax.set_ylabel(ylabel, fontsize=11, color=TEXT2,
+                      labelpad=10, fontfamily='Segoe UI')
     if xlabel:
-        ax.set_xlabel(xlabel, fontsize=9, color=TEXT2,
-                      labelpad=8, fontfamily='Segoe UI')
+        ax.set_xlabel(xlabel, fontsize=11, color=TEXT2,
+                      labelpad=10, fontfamily='Segoe UI')
 
 
 def style_bar_chart(ax, bars, color=C_BLUE, highlight_color=C_ORANGE,

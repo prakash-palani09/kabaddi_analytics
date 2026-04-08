@@ -23,9 +23,17 @@ class DataExtractor:
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video not found: {video_path}")
         
-        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "yolov8n-pose.pt")
-        self.model = YOLO(model_path)
-        
+        model_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "models", "yolov8m-pose.pt")
+        if not os.path.exists(model_path):
+            print("yolov8m-pose.pt not found in models/, downloading...")
+            self.model = YOLO("yolov8m-pose.pt")  # auto-downloads
+            import shutil
+            shutil.copy(self.model.ckpt_path, model_path)
+            print(f"✓ Saved to {model_path}")
+        else:
+            self.model = YOLO(model_path)
+        print("✓ Model: YOLOv8m-pose (medium — higher accuracy)")
+    
         # Load simplified court dynamics
         try:
             self.court_dynamics = SimplifiedCourtDynamics.load_from_config(video_path)
@@ -106,16 +114,16 @@ class DataExtractor:
             cv2.line(frame, e1, e2, (255, 0, 255), 2)
             cv2.putText(frame, "END", e1, cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
             
-            # Enhanced tracking with multi-scale detection for far players
+            # Medium model — can use higher conf without missing players
             results = self.model.track(
-                frame, 
-                persist=True, 
-                conf=0.05,      # Very low confidence to detect far players
-                iou=0.15,       # Lower IOU for better matching
+                frame,
+                persist=True,
+                conf=0.25,      # Higher conf — medium model is accurate enough
+                iou=0.3,        # Standard IOU for cleaner tracking
                 verbose=False,
                 tracker="botsort.yaml",
-                imgsz=1920,     # Larger image size for better far detection
-                max_det=50      # Detect more players
+                imgsz=1280,     # 1280 is optimal for yolov8m balance of speed/accuracy
+                max_det=50
             )
             
             current_frame_players = set()
@@ -238,7 +246,8 @@ class DataExtractor:
                     if self.raid_active and self.raider_locked and tid == self.raider_id:
                         is_raider = True
                         raider_detected_this_frame = True
-                    elif not self.raid_active:
+                    elif not self.raid_active and len(self.raids) == 0:
+                        # Only detect a new raid if no raid has been recorded yet
                         if all_players[tid]['baseline_side'] is not None:
                             recent_sides = all_players[tid]['side_history'][-7:]
                             if len(recent_sides) >= 7:
@@ -311,74 +320,29 @@ class DataExtractor:
                             cv2.imwrite(f"{self.keyframes_dir}/raid_{len(self.raids)+1}_end_frame_{frame_count}.jpg", frame)
                             self.end_raid(frame_count, all_players)
             
-            # AGGRESSIVE RAIDER RECOVERY - Enhanced
+            # RAIDER RECOVERY — only resume if the EXACT same ID reappears, never switch
             if self.raid_active and not raider_detected_this_frame:
                 self.missing_frames += 1
-                
-                # Try to recover raider immediately
-                if results and results[0].boxes.id is not None and self.raider_id in all_players:
-                    if len(all_players[self.raider_id]['positions']) > 0:
-                        last_raider_pos = all_players[self.raider_id]['positions'][-1]
-                        best_candidate = None
-                        min_distance = float('inf')
-                        
-                        for i, box in enumerate(results[0].boxes):
-                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            tid = int(box.id[0])
-                            
-                            # Get center with pose if available
-                            if results[0].keypoints is not None and i < len(results[0].keypoints):
-                                kpts = results[0].keypoints[i].xy.cpu().numpy()[0]
-                                valid_kpts = kpts[kpts[:, 0] > 0]
-                                if len(valid_kpts) >= 4:
-                                    cx = int(np.mean(valid_kpts[:, 0]))
-                                    cy = int(np.mean(valid_kpts[:, 1]))
-                                else:
-                                    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                            else:
-                                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                            
-                            # Only consider players inside play box
-                            if not self.court_dynamics.is_inside_play_box((cx, cy)):
-                                continue
-                            
-                            side = self.point_side(cx, cy)
-                            
-                            # Check if on opposite side (potential raider)
-                            if tid in all_players and all_players[tid]['baseline_side'] is not None:
-                                if side != all_players[tid]['baseline_side']:
-                                    dist = np.sqrt((cx - last_raider_pos[0])**2 + (cy - last_raider_pos[1])**2)
-                                    if dist < 400 and dist < min_distance:  # Increased search radius
-                                        min_distance = dist
-                                        best_candidate = tid
-                            # Also check unknown players (new detections)
-                            elif tid not in all_players:
-                                dist = np.sqrt((cx - last_raider_pos[0])**2 + (cy - last_raider_pos[1])**2)
-                                if dist < 300 and dist < min_distance:
-                                    min_distance = dist
-                                    best_candidate = tid
-                        
-                        # Recover immediately if found
-                        if best_candidate:
-                            # STRICT: Only switch if very close or same ID reappeared
-                            if min_distance < 200 or best_candidate == self.raider_id:
-                                print(f"⚡ Raider recovered: {self.raider_id} -> {best_candidate} (dist: {min_distance:.0f}px)")
-                                self.raider_id = best_candidate
-                                self.missing_frames = 0
-                                raider_detected_this_frame = True
-                                self.raider_locked = True
-                
+
+                # Check if the locked raider ID reappeared in this frame
+                if results and results[0].boxes.id is not None:
+                    for i, box in enumerate(results[0].boxes):
+                        if int(box.id[0]) == self.raider_id:
+                            self.missing_frames = 0
+                            raider_detected_this_frame = True
+                            print(f"⚡ Raider {self.raider_id} reappeared")
+                            break
+
                 if self.missing_frames > 0 and self.raider_id in all_players:
                     if len(all_players[self.raider_id]['positions']) > 0:
                         last_pos = all_players[self.raider_id]['positions'][-1]
                         cv2.circle(frame, (last_pos[0], last_pos[1]), 30, (0, 165, 255), 3)
-                        cv2.putText(frame, f"SEARCHING {self.missing_frames}", 
-                                   (last_pos[0]-50, last_pos[1]-40), 
+                        cv2.putText(frame, f"SEARCHING {self.missing_frames}",
+                                   (last_pos[0]-50, last_pos[1]-40),
                                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 165, 255), 2)
-                
-                if self.missing_frames > 120:  # Increased from 60 to 120 frames (4 seconds)
+
+                if self.missing_frames > 120:
                     print(f"❌ Raider lost, ending raid")
-                    # Save key frame: Raid Lost
                     cv2.imwrite(f"{self.keyframes_dir}/raid_{len(self.raids)+1}_lost_frame_{frame_count}.jpg", frame)
                     self.end_raid(frame_count, all_players)
             

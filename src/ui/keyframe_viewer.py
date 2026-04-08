@@ -77,7 +77,7 @@ def open_keyframe_viewer(parent_root):
     # ═══════════════════════════════════════════════════════════════════
     win = tk.Toplevel(parent_root)
     win.title("Raid Key Frames Viewer")
-    win.geometry("1080x820")
+    win.geometry("1160x900")
     win.configure(bg=BG)
 
     # ── Top header bar ────────────────────────────────────────────────
@@ -89,10 +89,10 @@ def open_keyframe_viewer(parent_root):
 
     tk.Label(header_inner,
              text="Raid Key Frames Viewer",
-             font=F_H2, fg=WHITE, bg=PRIMARY).pack(anchor='w')
+             font=('Segoe UI', 18, 'bold'), fg=WHITE, bg=PRIMARY).pack(anchor='w')
     tk.Label(header_inner,
              text="Navigate through raid events: Start → Baulk → Bonus → End",
-             font=F_SMALL, fg='#bfdbfe', bg=PRIMARY).pack(anchor='w', pady=(2, 0))
+             font=('Segoe UI', 12), fg='#bfdbfe', bg=PRIMARY).pack(anchor='w', pady=(2, 0))
 
     # Primary accent underline
     tk.Frame(header, bg=SUCCESS, height=3).pack(fill='x')
@@ -116,26 +116,26 @@ def open_keyframe_viewer(parent_root):
 
     raid_num_lbl = tk.Label(raid_pill_frame,
                             text="Raid #–",
-                            font=('Segoe UI', 18, 'bold'),
+                            font=('Segoe UI', 22, 'bold'),
                             fg=PRIMARY, bg=CARD)
     raid_num_lbl.pack(side='left')
 
     raid_counter_lbl = tk.Label(raid_pill_frame,
                                 text="",
-                                font=F_BODY, fg=TEXT2, bg=CARD)
+                                font=('Segoe UI', 13), fg=TEXT2, bg=CARD)
     raid_counter_lbl.pack(side='left', padx=(PAD_SM, 0))
 
     # Right: event badge
     event_badge = tk.Label(info_inner,
                            text="  START  ",
-                           font=('Segoe UI', 9, 'bold'),
+                           font=('Segoe UI', 11, 'bold'),
                            fg=WHITE, bg=SUCCESS,
-                           relief='flat', padx=4, pady=3)
+                           relief='flat', padx=6, pady=4)
     event_badge.pack(side='right')
 
     event_step_lbl = tk.Label(info_inner,
                               text="Step 1 / 4",
-                              font=F_SMALL, fg=TEXT2, bg=CARD)
+                              font=('Segoe UI', 11), fg=TEXT2, bg=CARD)
     event_step_lbl.pack(side='right', padx=(0, PAD_MD))
 
     divider(win, bg=BORDER).pack(fill='x', padx=PAD_LG)
@@ -153,15 +153,15 @@ def open_keyframe_viewer(parent_root):
     not_detected_frame = tk.Frame(img_card, bg='#0f172a')
     alert_icon = tk.Label(not_detected_frame,
                           text="⚠",
-                          font=('Segoe UI', 36),
+                          font=('Segoe UI', 44),
                           fg=ACCENT, bg='#0f172a')
     not_det_title = tk.Label(not_detected_frame,
                              text="Not Detected",
-                             font=('Segoe UI', 18, 'bold'),
+                             font=('Segoe UI', 22, 'bold'),
                              fg=WHITE, bg='#0f172a')
     not_det_sub = tk.Label(not_detected_frame,
                            text="",
-                           font=F_BODY, fg=TEXT3, bg='#0f172a')
+                           font=('Segoe UI', 13), fg=TEXT3, bg='#0f172a')
 
     # ── Event timeline strip ─────────────────────────────────────────
     timeline_card = tk.Frame(win, bg=CARD,
@@ -183,7 +183,7 @@ def open_keyframe_viewer(parent_root):
 
         lbl = tk.Label(cell,
                        text=EVENT_LABELS[ev],
-                       font=F_SMALL, fg=TEXT3, bg=CARD)
+                       font=('Segoe UI', 11), fg=TEXT3, bg=CARD)
         lbl.pack()
 
         if i < len(event_sequence) - 1:
@@ -225,10 +225,10 @@ def open_keyframe_viewer(parent_root):
                 lbl.config(fg=TEXT3)
             elif i == event_idx:
                 dot.config(bg=col)
-                lbl.config(fg=col, font=('Segoe UI', 9, 'bold'))
+                lbl.config(fg=col, font=('Segoe UI', 11, 'bold'))
             else:
                 dot.config(bg=BORDER)
-                lbl.config(fg=TEXT3, font=F_SMALL)
+                lbl.config(fg=TEXT3, font=('Segoe UI', 11))
 
         # Image or not-detected panel
         frame_file = raids_data[raid_num].get(event_type)
@@ -241,7 +241,7 @@ def open_keyframe_viewer(parent_root):
             if os.path.exists(frame_path):
                 img = cv2.imread(frame_path)
                 img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                img = cv2.resize(img, (960, 520))
+                img = cv2.resize(img, (1040, 580))
                 photo = ImageTk.PhotoImage(Image.fromarray(img))
                 frame_label.configure(image=photo)
                 frame_label.image = photo
@@ -320,7 +320,7 @@ def open_keyframe_viewer(parent_root):
     # Shortcut hint
     tk.Label(nav_inner,
              text="  ← → arrow keys to navigate",
-             font=F_SMALL, fg=TEXT3, bg=CARD).pack(side='right', padx=PAD_MD)
+             font=('Segoe UI', 11), fg=TEXT3, bg=CARD).pack(side='right', padx=PAD_MD)
 
     # ── Initial display ───────────────────────────────────────────────
     update_display()
