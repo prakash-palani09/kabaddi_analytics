@@ -1,2 +1,2 @@
 raider_id,duration,max_penetration,avg_penetration,success,crossed_bonus,crossed_baulk,deepest_zone,zones_visited,lateral_movement,sectors_visited,defenders_engaged,reaction_time,avg_speed,direction_changes,start_frame,end_frame
-2,8.133333333333333,5.3547452607981105,3.2501345582425136,1,True,True,unknown,0,0,0,0,6.533333333333333,8.50463394799983,9,38,282
+2,8.166666666666666,5.423478597937282,3.274374884701247,1,True,True,unknown,0,0,0,0,5.666666666666667,8.551495071001481,10,37,282
