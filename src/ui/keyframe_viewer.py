@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, ttk
 import os
 import cv2
 from PIL import Image, ImageTk
@@ -102,10 +102,37 @@ def open_keyframe_viewer(parent_root):
     current_raid      = tk.IntVar(value=min(raids_data.keys()))
     current_event_idx = tk.IntVar(value=0)
 
+    # ── Raid selector bar ────────────────────────────────────────────
+    selector_bar = tk.Frame(win, bg=CARD,
+                            highlightbackground=BORDER, highlightthickness=1)
+    selector_bar.pack(fill='x', padx=PAD_LG, pady=(PAD_LG, 0))
+
+    sel_inner = tk.Frame(selector_bar, bg=CARD)
+    sel_inner.pack(fill='x', padx=PAD_LG, pady=PAD_SM)
+
+    tk.Label(sel_inner, text="Select Raid:",
+             font=('Segoe UI', 11, 'bold'), fg=TEXT, bg=CARD).pack(side='left')
+
+    raid_keys = sorted(raids_data.keys())
+    raid_combo_var = tk.StringVar(value=f"Raid #{raid_keys[0]}")
+    raid_combo = ttk.Combobox(
+        sel_inner,
+        textvariable=raid_combo_var,
+        values=[f"Raid #{r}" for r in raid_keys],
+        state='readonly',
+        width=14,
+        font=('Segoe UI', 11)
+    )
+    raid_combo.pack(side='left', padx=(PAD_SM, PAD_LG))
+
+    tk.Label(sel_inner,
+             text=f"{len(raids_data)} raid(s) available",
+             font=('Segoe UI', 10), fg=TEXT3, bg=CARD).pack(side='left')
+
     # ── Info strip ───────────────────────────────────────────────────
     info_strip = tk.Frame(win, bg=CARD,
                           highlightbackground=BORDER, highlightthickness=1)
-    info_strip.pack(fill='x', padx=PAD_LG, pady=(PAD_LG, 0))
+    info_strip.pack(fill='x', padx=PAD_LG, pady=(PAD_SM, 0))
 
     info_inner = tk.Frame(info_strip, bg=CARD)
     info_inner.pack(fill='x', padx=PAD_LG, pady=PAD_SM)
@@ -265,8 +292,10 @@ def open_keyframe_viewer(parent_root):
             raid_keys = sorted(raids_data.keys())
             idx = raid_keys.index(raid_num)
             if idx < len(raid_keys) - 1:
-                current_raid.set(raid_keys[idx + 1])
+                new_raid = raid_keys[idx + 1]
+                current_raid.set(new_raid)
                 current_event_idx.set(0)
+                raid_combo_var.set(f"Raid #{new_raid}")
             else:
                 messagebox.showinfo("End", "Reached the end of all raids!")
                 return
@@ -282,12 +311,23 @@ def open_keyframe_viewer(parent_root):
             raid_keys = sorted(raids_data.keys())
             idx = raid_keys.index(raid_num)
             if idx > 0:
-                current_raid.set(raid_keys[idx - 1])
+                new_raid = raid_keys[idx - 1]
+                current_raid.set(new_raid)
                 current_event_idx.set(len(event_sequence) - 1)
+                raid_combo_var.set(f"Raid #{new_raid}")
             else:
                 messagebox.showinfo("Start", "Already at the first event!")
                 return
         update_display()
+
+    def on_raid_selected(event=None):
+        val = raid_combo_var.get()  # e.g. "Raid #3"
+        raid_num = int(val.split('#')[1])
+        current_raid.set(raid_num)
+        current_event_idx.set(0)
+        update_display()
+
+    raid_combo.bind('<<ComboboxSelected>>', on_raid_selected)
 
     def jump_to_raid():
         raid_keys = sorted(raids_data.keys())
@@ -298,6 +338,7 @@ def open_keyframe_viewer(parent_root):
         if raid_num and raid_num in raids_data:
             current_raid.set(raid_num)
             current_event_idx.set(0)
+            raid_combo_var.set(f"Raid #{raid_num}")
             update_display()
 
     # ── Nav buttons ───────────────────────────────────────────────────

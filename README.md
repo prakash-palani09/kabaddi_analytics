@@ -24,53 +24,58 @@ The system is designed as a **research prototype** to support coaching decisions
 ## 🧠 Key Features
 
 ### Detection & Tracking
-- **YOLOv8m-Pose** — detects players with 17-point body keypoints per frame
+- **YOLOv8m-Pose** — detects players with 17-point body keypoints per frame at 1280px resolution (conf=0.25, iou=0.3)
 - **BotSort tracker** — maintains persistent player IDs using Kalman filter + Re-ID
-- **Raider ID lock** — once a raider is identified, only that exact ID is tracked for the entire raid, preventing false switches to defenders
-- **One raid per video** — system correctly handles single-raid videos without false re-triggers
+- **Torso-based centering** — uses shoulder and hip keypoints (indices 5, 6, 11, 12) for stable player center
+- **Far-player adaptive smoothing** — alpha=0.5 for small/distant players, alpha=0.7 for normal players
+- **Play-box filtering** — players outside the court polygon are ignored entirely (gray box drawn, skipped)
+- **Raider ID lock** — once a raider is identified, only that exact ID is tracked for the entire raid
+- **One raid per video** — system only detects a new raid if no raid has been recorded yet
 
 ### Court Geometry
 - **Interactive court setup** — click 13 points to define play box, midline, baulk, bonus, and end lines
-- **Perpendicular distance formula** — calculates exact penetration depth in meters using `|Ax + By + C| / √(A² + B²)`
+- **Perpendicular distance formula** — calculates penetration depth in meters using `|Ax + By + C| / √(A² + B²)`
+- **End line center reference** — uses midpoint of both end line endpoints as the reference for pixel-to-meter ratio
 - **Ray casting** — determines if a player is inside the court polygon
-- **Pixel-to-meter conversion** — calibrated using midline-to-endline pixel distance (= 6.5m)
-- **End line center reference** — uses midpoint of both end line endpoints for accurate depth ratio
+- **Actual line depth measurement** — baulk and bonus line depths are measured from calibration, not assumed fixed
+- **Inside-court keypoint filtering** — only keypoints confirmed inside the play box contribute to penetration
 
 ### Raid Detection & Metrics
-- **Sliding window majority vote** — detects raid start (9/10 frames on opponent side) and end (7/8 frames back at baseline)
-- **Penetration depth** — measured in meters, clamped to [0, 6.5m], only inside-court keypoints used
-- **Line crossing detection** — baulk (3.75m), bonus (4.75m) via depth threshold comparison
-- **Raid success** — detected when raider returns to their baseline
-- **Defender engagement** — counts unique defenders within 80px proximity during the raid
-- **Avg speed** — computed in meters/second using court pixel-to-meter ratio
-- **Direction changes** — counts movement angle changes > 45° (agility indicator)
-- **Keyframe capture** — saves JPEGs at raid start, baulk crossing, bonus crossing, and end
+- **Baseline establishment** — first 15 frames used, requires 11/15 consensus to lock a player's baseline side
+- **Raid start detection** — sliding window: 6 of last 7 frames on opponent side triggers raid
+- **Raid end detection** — sliding window: 4 of last 5 frames back on baseline side ends raid (success)
+- **Raider recovery** — if raider disappears, system waits for the exact same ID to reappear for up to 120 frames before ending the raid
+- **Lost player cleanup** — players not seen for 90 frames are removed from tracking
+- **Penetration depth** — perpendicular distance from midline, measured in meters, clamped to [0, 6.5m]
+- **Line crossing detection** — baulk and bonus crossings flagged when penetration depth ≥ measured line depth
+- **Raid success** — detected when raider returns to their baseline (4/5 frame consensus)
+- **Direction changes** — counts movement reversals using dot product sign test (dot < 0)
+- **Keyframe capture** — saves JPEGs at raid start, baulk crossing, bonus crossing, end, and lost events
 
 ### Player Profiling & Ranking
 - **Player profiles** — aggregates all raid metrics per player across matches
 - **Weighted ranking score:**
   ```
   Score = 0.30 × success_rate
-        + 0.25 × normalized_points
-        + 0.25 × normalized_penetration
-        - 0.20 × duration_penalty
+        + 0.25 × (avg_penetration / 5.0)
+        + 0.25 × (avg_points / 3.0)
+        - 0.20 × (avg_duration / 10.0)
   ```
-- **Team management** — players grouped by team, team names saved to profiles
 - **Recent form** — ranking uses last 15 matches for scoring, all-time stats for display
+- **Team management** — players grouped by team, team names saved to profiles
 - **Auto team detection** — team name inferred from player ID prefix (e.g. `TeamA_P1` → `TeamA`)
 
 ### Dashboard (UI)
-- **5-tab layout** — Video Processing, Player Management, Player Rankings, Analytics, Teams
-- **Player Rankings table** — sortable, top-3 highlighted, double-click opens player dashboard
-- **Analytics charts** — 4 bar charts (scores, success rate, penetration, total points) for top 10 players
+- **4-tab layout** — Video Processing, Player Rankings, Analytics, Teams
+- **Player Rankings tab** — sortable table, double-click row opens player dashboard; includes Add/Delete player data form
+- **Analytics tab** — 4 bar charts (scores, success rate, penetration, total points) for top 10 players
 - **Player Dashboard** — stat cards + performance radar chart (Efficiency, Aggression, Impact, Control, Consistency)
-- **Keyframe Viewer** — navigate raid events with event timeline and keyboard shortcuts
-- **Teams tab** — selectable team cards with filtered player tables, auto-refreshes when new teams added
+- **Keyframe Viewer** — navigate raid events (Start → Baulk → Bonus → End) with jump-to-raid support
+- **Teams tab** — team buttons with filtered player rankings table
 
 ### Evaluation
-- **`evaluate_metrics.py`** — standalone evaluation script in root folder
-- Computes Precision, Recall, F1-Score, Accuracy, MAE, RMSE, Spearman ρ
-- 6 evaluation tables: dataset stats, raid success, line crossing, penetration depth, player ranking, summary
+- **`evaluate_metrics.py`** — standalone evaluation script, outputs 6 tables (Precision, Recall, F1, MAE, RMSE, Spearman ρ)
+- **`evaluation_graphs.py`** — generates 8 evaluation PNG plots saved to `evaluation_plots/`
 
 ---
 
@@ -88,10 +93,10 @@ kabaddi_analytics/
 │
 ├── court/
 │   ├── setup_play_area.py      # Interactive 13-point court calibration tool
-│   └── simplified_court.py     # Court geometry — penetration, line crossing, ray casting
+│   └── simplified_court.py     # Court geometry — perpendicular distance, line crossing, ray casting
 │
 ├── config/
-│   └── play_area.json          # Saved court configurations per video path
+│   └── play_area.json          # Saved court configurations keyed by video path
 │
 ├── data/
 │   ├── videos/                 # Input match videos (gitignored)
@@ -105,14 +110,15 @@ kabaddi_analytics/
 │   └── architecture.png        # System architecture diagram
 │
 ├── models/
-│   ├── yolov8m-pose.pt         # YOLOv8 medium pose model (primary, ~51MB)
+│   ├── yolov8m-pose.pt         # YOLOv8 medium pose model (primary, ~51MB, auto-downloaded)
 │   └── yolov8n-pose.pt         # YOLOv8 nano pose model (baseline)
 │
 ├── scripts/
-│   ├── data_extract.py         # Main video processing pipeline
+│   ├── data_extract.py         # Main video processing pipeline (DataExtractor class)
 │   ├── generate_synthetic_data.py  # Synthetic data generator
+│   ├── test_penetration.py     # Penetration calculation verification tool
 │   ├── view_metrics.py         # CLI metrics viewer
-│   └── data/keyframes/         # Saved raid keyframe JPEGs
+│   └── data/keyframes/         # Saved raid keyframe JPEGs (when run directly)
 │
 ├── src/
 │   └── ui/
@@ -123,6 +129,7 @@ kabaddi_analytics/
 │       └── theme.py            # Unified design system (colors, fonts, components)
 │
 ├── evaluate_metrics.py         # Standalone evaluation metrics calculator
+├── evaluation_graphs.py        # Generates 8 evaluation PNG plots → evaluation_plots/
 ├── requirements.txt            # Python dependencies
 ├── ui_requirements.txt         # UI-specific dependencies
 └── README.md
@@ -144,6 +151,7 @@ kabaddi_analytics/
 | Matplotlib | Analytics charts and radar chart |
 | Tkinter | Desktop UI framework |
 | Pillow (PIL) | Image processing for keyframe display |
+| SciPy | Spearman correlation for evaluation metrics |
 
 ### Algorithms
 
@@ -153,15 +161,15 @@ kabaddi_analytics/
 | Hungarian Algorithm | BotSort (internal) | Match detections to existing tracks |
 | CNN (YOLOv8m) | Ultralytics (internal) | Detect players and body keypoints |
 | Non-Maximum Suppression | Ultralytics (internal) | Remove duplicate detections |
-| Exponential Moving Average | `data_extract.py` | Smooth player positions |
+| Exponential Moving Average | `data_extract.py` | Smooth player positions (alpha=0.7 near, 0.5 far) |
 | Cross Product Sign Test | `data_extract.py` | Determine which court side a player is on |
-| Sliding Window Majority Vote | `data_extract.py` | Detect raid start and end events |
-| Mode Detection | `data_extract.py` | Establish each player's baseline side |
+| Sliding Window Majority Vote | `data_extract.py` | Raid start (6/7 frames) and end (4/5 frames) detection |
+| Mode Detection | `data_extract.py` | Establish each player's baseline side (11/15 consensus) |
 | Ray Casting | `simplified_court.py` | Point-in-polygon test for court boundary |
-| Perpendicular Distance | `simplified_court.py` | Penetration depth in meters |
-| Vector Projection (Dot Product) | `simplified_court.py` | Measure line depths from midline |
-| Cosine Similarity | `raid_extractor.py` | Detect direction changes (agility) |
-| Min-Max Normalization | `ranking.py` | Normalize metrics to [0, 1] |
+| Perpendicular Distance | `simplified_court.py` | Penetration depth in meters via `\|Ax+By+C\|/√(A²+B²)` |
+| Vector Projection (Dot Product) | `simplified_court.py` | Measure actual baulk/bonus line depths from midline |
+| Dot Product Sign Test | `simplified_court.py` | Direction change detection (dot < 0 = reversal) |
+| Min-Max Normalization | `ranking.py` | Normalize metrics for scoring |
 | Weighted Linear Scoring | `ranking.py` | Multi-criteria player ranking |
 | Euclidean Distance | `raid_extractor.py` | Defender proximity detection |
 | Statistical Aggregation | `profiling.py` | Build player profiles (mean, sum) |
@@ -209,42 +217,86 @@ Click **13 points** in this exact order:
 |---|---|---|
 | 1 – 5 | Play box corners (pentagon, clockwise) | — |
 | 6 – 7 | Midline (left to right) | 0m |
-| 8 – 9 | Baulk line (left to right) | 3.75m |
-| 10 – 11 | Bonus line (left to right) | 4.75m |
+| 8 – 9 | Baulk line (left to right) | ~3.75m |
+| 10 – 11 | Bonus line (left to right) | ~4.75m |
 | 12 – 13 | End line (left to right) | 6.5m |
 
 Press **ENTER** to save, **ESC** to cancel.
-Configuration saved to `config/play_area.json`.
+Configuration saved to `config/play_area.json` keyed by the full video path.
 
 > ⚠️ Accurate calibration is critical. A 10px error in court setup causes ~0.18m error in all penetration measurements.
 
 ---
 
-### Step 2 — Extract Raid Data
+### Step 2 — Verify Penetration Calculation (Optional)
+
+```bash
+python scripts/test_penetration.py data/videos/your_video.mp4
+```
+
+Expected output:
+```
+Midline center:  0.00m ✓
+Baulk line at:  ~3.75m ✓
+Bonus line at:  ~4.75m ✓
+End line at:     6.50m ✓
+```
+
+---
+
+### Step 3 — Extract Raid Data
 
 ```bash
 python scripts/data_extract.py data/videos/your_video.mp4
 ```
 
 **What happens internally:**
-1. YOLOv8m-Pose detects all players every frame at 1280px resolution
-2. BotSort assigns and maintains tracker IDs using Kalman filter
-3. Each player's baseline side is established from first 15 frames (needs 11/15 consensus)
-4. Raid detected when a player crosses midline (9/10 frame sliding window)
-5. Raider ID is locked — no switching to other players for entire raid duration
-6. Penetration depth tracked per frame using only inside-court keypoints
-7. Baulk and bonus line crossings flagged when depth exceeds measured line depth
-8. Raid ends when raider returns to baseline (7/8 frame consensus) or times out (120 frames = 4 seconds)
-9. Keyframes saved at start, baulk, bonus, and end events
-10. All metrics exported to CSV
+1. YOLOv8m-Pose detects all players every frame at 1280px (conf=0.25, iou=0.3, max_det=50)
+2. BotSort assigns and maintains tracker IDs
+3. Players outside the play box polygon are filtered out and skipped
+4. Player center computed from torso keypoints (shoulders + hips); falls back to bounding box center
+5. Position smoothed with EMA (alpha=0.7 normal, 0.5 for far/small players)
+6. Each player's baseline side established from first 15 frames (needs 11/15 consensus)
+7. Raid detected when a player has 6 of last 7 frames on the opponent side
+8. Raider ID is locked — no switching to other players for entire raid duration
+9. Penetration depth computed per frame using perpendicular distance formula, only inside-court keypoints used
+10. Baulk and bonus crossings flagged when penetration ≥ measured line depth
+11. Raid ends when raider has 4 of last 5 frames back on baseline (success), or raider ID missing for 120 frames (lost)
+12. Players not seen for 90 frames are removed from tracking
+13. Keyframes saved at start, baulk, bonus, end, and lost events
+14. All metrics exported to CSV
 
 **Output:**
-- `data/extracted/your_video_raid_metrics.csv` — complete raid metrics
+- `data/extracted/{video_name}_raid_metrics.csv` — complete raid metrics
 - `data/keyframes/` — raid event keyframe JPEGs
+
+**On-screen display during processing:**
+| Colour | Meaning |
+|---|---|
+| Yellow polygon | Play box boundary |
+| Cyan line | Midline |
+| Red line | Baulk line |
+| Green line | Bonus line |
+| Magenta line | End line |
+| Green box + `RAIDER (ID:X) LOCKED` | Active raider |
+| Magenta dots | Raider keypoints |
+| Cyan dots | Defender keypoints |
+| Gray box + `OUT` | Player outside play box |
+| Orange circle + `SEARCHING N` | Raider missing, waiting for same ID |
+
+**Console messages:**
+| Message | Meaning |
+|---|---|
+| `✓ Player X baseline established` | Baseline side locked for player |
+| `🎯 Raid detected!` | Midline crossing confirmed |
+| `🏃 Raid started - Raider X LOCKED` | Raider ID locked |
+| `⚡ Raider X reappeared` | Same ID recovered after disappearance |
+| `🔙 Raider returned to baseline` | Successful raid completion |
+| `❌ Raider lost, ending raid` | 120-frame timeout reached |
 
 ---
 
-### Step 3 — Launch Dashboard
+### Step 4 — Launch Dashboard
 
 ```bash
 python src/ui/kabaddi_ui_clean.py
@@ -255,14 +307,19 @@ python src/ui/kabaddi_ui_clean.py
 | Tab | Purpose |
 |---|---|
 | Video Processing | Select video, run court setup and extraction, view processing log |
-| Player Management | Add or delete player raid data manually with team assignment |
-| Player Rankings | Full sortable rankings table — double-click row for player dashboard |
+| Player Rankings | Sortable rankings table — double-click row for player dashboard; Add/Delete player data form at top |
 | Analytics | Bar charts for top 10 players across 4 metrics |
-| Teams | Select a team to view filtered player rankings |
+| Teams | Click a team button to view filtered player rankings |
+
+**Adding extracted data to rankings:**
+1. After video processing completes, a dialog appears automatically
+2. Enter Match ID, Player ID, Team Name, raid points, and success values
+3. Click **Add to Rankings** — data is saved and rankings update immediately
+4. Or manually add a single raid via the form at the top of the Player Rankings tab
 
 ---
 
-### Step 4 — Run Evaluation Metrics
+### Step 5 — Run Evaluation Metrics
 
 ```bash
 # Evaluate on synthetic data (default)
@@ -272,7 +329,28 @@ python evaluate_metrics.py
 python evaluate_metrics.py --csv data/extracted/your_video_raid_metrics.csv
 ```
 
-Outputs 6 evaluation tables covering dataset statistics, classification metrics, regression metrics, and ranking correlation.
+Outputs 6 evaluation tables: dataset statistics, raid success classification, line crossing classification, penetration depth regression, player ranking correlation, and summary.
+
+---
+
+### Step 6 — Generate Evaluation Graphs
+
+```bash
+python evaluation_graphs.py
+```
+
+Saves 8 PNG plots to `evaluation_plots/`:
+
+| File | Graph |
+|---|---|
+| `1_raid_detection_metrics.png` | Precision / Recall / F1 / Accuracy bar chart |
+| `2_penetration_scatter.png` | Predicted vs Ground Truth scatter with MAE/RMSE |
+| `3_confusion_matrix.png` | Line crossing confusion matrix |
+| `4_ranking_correlation.png` | Spearman ρ rank scatter |
+| `5_system_radar.png` | Component-wise radar chart |
+| `6_processing_speed.png` | CPU vs GPU FPS grouped bar |
+| `7_raid_outcome_distribution.png` | Raid outcome pie chart |
+| `8_summary_dashboard.png` | All panels in one figure |
 
 ---
 
@@ -280,11 +358,16 @@ Outputs 6 evaluation tables covering dataset statistics, classification metrics,
 
 ### Penetration Depth
 ```
-Line equation:   Ax + By + C = 0   (derived from midline endpoints)
-Pixel distance:  d = |Ax + By + C| / √(A² + B²)
-Reference depth: total_px = distance from midline center to end line center
-Meters:          depth = (d / total_px) × 6.5m
-Clamped to:      [0.0, 6.5] meters
+Midline equation:  Ax + By + C = 0
+                   A = y2 - y1,  B = x1 - x2,  C = x2*y1 - x1*y2
+
+Pixel distance:    d = |Ax + By + C| / √(A² + B²)
+
+Reference depth:   total_px = |A*ex + B*ey + C| / √(A² + B²)
+                   where (ex, ey) = center of end line endpoints
+
+Meters:            depth = (d / total_px) × 6.5
+Clamped to:        [0.0, 6.5] meters
 ```
 
 ### Raid Duration
@@ -295,7 +378,7 @@ duration (seconds) = (end_frame - start_frame) / FPS
 ### Average Speed
 ```
 total_distance_px = Σ √((x₂-x₁)² + (y₂-y₁)²)  for consecutive positions
-px_per_meter      = depth_magnitude / 6.5
+px_per_meter      = total_pixel_depth / 6.5
 total_distance_m  = total_distance_px / px_per_meter
 speed (m/s)       = total_distance_m / duration
 ```
@@ -331,41 +414,48 @@ Score = 0.30 × success_rate
 |---|---|
 | Single fixed camera required | Cannot handle moving or multi-angle cameras |
 | Manual court setup per video | ~5 minutes setup time per new video |
+| Config keyed by full video path | Moving the video file requires re-running court setup |
 | No touch detection | Raid success based on return to baseline only |
 | Proximity-based engagement | Not actual physical contact detection |
 | ID switches during heavy occlusion | Rare but possible in pile-ups |
 | CPU processing is slow | Real-time requires GPU |
-| One raid per video currently | Multi-raid videos need separate runs |
+| One raid per video | Multi-raid videos need separate runs |
 | Lighting sensitivity | Performance degrades in poor lighting |
 
 ---
 
 ## ✅ Completed Features
 
-- ✅ YOLOv8m-Pose player detection with 17 keypoints
+- ✅ YOLOv8m-Pose player detection with 17 keypoints at 1280px
 - ✅ BotSort tracking with persistent IDs and Kalman filter
+- ✅ Play-box filtering — outside-court players ignored
+- ✅ Torso-based player centering (shoulders + hips keypoints)
+- ✅ Adaptive EMA position smoothing (near vs far players)
 - ✅ Interactive 13-point court calibration
-- ✅ Automatic raid detection via midline crossing (9/10 frame consensus)
+- ✅ Perpendicular distance penetration formula with end line center reference
+- ✅ Inside-court keypoint filtering for accurate penetration
+- ✅ Automatic raid detection — 6/7 frame sliding window
 - ✅ Strict raider ID lock — no switching to defenders mid-raid
-- ✅ Single-raid-per-video guard against false re-triggers
-- ✅ Penetration depth in meters, clamped to [0–6.5m]
-- ✅ End line center reference for accurate pixel-to-meter ratio
-- ✅ Baulk and bonus line crossing detection
-- ✅ Raid success detection via baseline return (7/8 frame consensus)
-- ✅ Defender engagement counting (80px proximity threshold)
-- ✅ Average speed in m/s using court calibration
-- ✅ Direction change counting (agility indicator)
+- ✅ Single-raid-per-video guard
+- ✅ Penetration depth clamped to [0–6.5m]
+- ✅ Baulk and bonus line crossing via measured line depth
+- ✅ Raid success detection — 4/5 frame baseline return consensus
+- ✅ Raider recovery — waits 120 frames for same ID before ending raid
+- ✅ Lost player cleanup after 90 frames
+- ✅ Direction change counting via dot product sign test
 - ✅ Keyframe capture at start, baulk, bonus, end, and lost events
 - ✅ Player profiling with all-time and recent-form stats
 - ✅ Weighted multi-criteria player ranking
 - ✅ Team management with profile persistence and auto-detection
-- ✅ 5-tab interactive desktop dashboard
-- ✅ Sortable rankings table with top-3 highlighting
-- ✅ Radar chart performance visualization
+- ✅ 4-tab interactive desktop dashboard
+- ✅ Sortable rankings table with double-click player dashboard
+- ✅ Radar chart performance visualization (5 dimensions)
 - ✅ Analytics bar charts for top 10 players
-- ✅ Keyframe viewer with event timeline and keyboard navigation
+- ✅ Keyframe viewer with event navigation and jump-to-raid
 - ✅ Evaluation metrics calculator (F1, MAE, RMSE, Spearman ρ)
+- ✅ Evaluation graphs generator (8 PNG plots)
 - ✅ Synthetic data generator (28 players, 4 teams, 12 matches)
+- ✅ Penetration verification tool (`test_penetration.py`)
 
 ## 🔄 In Progress
 
