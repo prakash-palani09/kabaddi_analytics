@@ -1,8 +1,8 @@
-opencv-python==4.8.1.78
-ultralytics==8.0.196
-numpy==1.24.3
-matplotlib==3.7.2
-torch==2.0.1
-torchvision==0.15.2
-Pillow==10.0.0
-easyocr==1.7.0
+# Kabaddi Analytics — UI Requirements
+# These are already covered by requirements.txt
+# This file exists for clarity — install requirements.txt first
+
+# Already in requirements.txt (listed here for reference):
+# matplotlib>=3.7.0       ← charts, radar chart
+# Pillow>=9.0.0           ← keyframe image display
+# tkinter                 ← built into Python, no install needed

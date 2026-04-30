@@ -178,6 +178,11 @@ kabaddi_analytics/
 
 ## 📦 Installation
 
+### Requirements
+- Python 3.10 or 3.11 (recommended)
+- Windows / Linux / macOS
+- GPU optional (CUDA 11.8+ for faster processing)
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/kabaddi_analytics.git
@@ -192,12 +197,41 @@ kabaddi_env\Scripts\activate
 # Activate — Linux/Mac
 source kabaddi_env/bin/activate
 
-# Install dependencies
+# Install all dependencies (single command)
 pip install -r requirements.txt
-pip install -r ui_requirements.txt
 ```
 
+**What gets installed:**
+
+| Package | Version | Purpose |
+|---|---|---|
+| opencv-python | >=4.8.0 | Video reading, frame processing, visualization |
+| ultralytics | >=8.0.0 | YOLOv8m-Pose detection + BotSort tracker |
+| torch | >=2.0.0 | Deep learning backend for YOLO |
+| torchvision | >=0.15.0 | Required by torch/ultralytics |
+| numpy | >=1.24.0 | Geometry calculations, array operations |
+| scipy | >=1.10.0 | Spearman correlation for evaluation |
+| matplotlib | >=3.7.0 | Analytics charts, radar chart, evaluation graphs |
+| Pillow | >=9.0.0 | Keyframe image display in UI |
+
+> **Tkinter** is built into Python — no separate install needed.
+
+> **BotSort** tracker is bundled inside `ultralytics` — no separate install needed.
+
 > The YOLOv8m-pose model (~51MB) is downloaded automatically on first run and saved to `models/yolov8m-pose.pt`.
+
+### GPU Setup (Optional but recommended)
+For ~3x faster processing, install the CUDA version of PyTorch **before** running `pip install -r requirements.txt`:
+```bash
+# CUDA 11.8
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+
+# CUDA 12.1
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+
+# Then install the rest
+pip install -r requirements.txt
+```
 
 ---
 
